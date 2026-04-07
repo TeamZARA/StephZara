@@ -407,12 +407,12 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-8">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.14),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.12),_transparent_24%),linear-gradient(180deg,#f8fbff_0%,#eef5ff_48%,#f8fafc_100%)] p-4 md:p-8">
       <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => void handleCsvFile(e.target.files?.[0] || null)} />
 
       <div className="mx-auto max-w-7xl space-y-6">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="grid gap-4 lg:grid-cols-[1.35fr_.85fr]">
-          <section className="rounded-3xl border bg-white p-6 shadow-sm">
+          <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur>
             <div className="mb-3 flex flex-wrap gap-2">
               <Badge>Production System</Badge>
               <OutlineBadge>PropCon Friendly</OutlineBadge>
@@ -420,7 +420,7 @@ export default function App() {
             </div>
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
               <div>
-                <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">StephZara Canvasser Hub</h1>
+                <h1 className="text-3xl font-semibold tracking-tight text-slate-900 md:text-5xl">StephZara Canvasser Hub</h1>
                 <p className="mt-2 max-w-2xl text-sm text-slate-600 md:text-base">
                   Full production-style interface for importing PropCon leads, preparing copy-ready WhatsApp messages, assigning canvassers, managing follow-ups, and tracking suburb performance.
                 </p>
@@ -438,7 +438,7 @@ export default function App() {
             </div>
           </section>
 
-          <section className="rounded-3xl border bg-white p-6 shadow-sm">
+          <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur>
             <div className="mb-4">
               <h3 className="flex items-center gap-2 text-lg font-semibold"><ShieldCheck size={18} /> Safe canvassing rules</h3>
               <p className="mt-1 text-sm text-slate-600">Designed for a real human canvasser workflow.</p>
@@ -455,11 +455,11 @@ export default function App() {
           </section>
         </motion.div>
 
-        <div className="grid grid-cols-2 gap-2 rounded-2xl border bg-white p-2 shadow-sm md:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 rounded-[24px] border border-white/70 bg-white/90 p-2 shadow-[0_18px_40px_rgba(15,23,42,0.08)] backdrop-blur md:grid-cols-5">
           {(["workspace", "import", "bulk", "manager", "settings"] as TabKey[]).map((tab) => (
             <button
               key={tab}
-              className={`rounded-xl px-4 py-3 text-sm font-medium ${activeTab === tab ? "bg-slate-100 text-slate-900" : "text-slate-500"}`}
+              className={`rounded-2xl px-4 py-3 text-sm font-medium transition ${activeTab === tab ? "bg-gradient-to-r from-slate-900 to-slate-700 text-white shadow" : "text-slate-500 hover:bg-slate-50"}`}
               onClick={() => setActiveTab(tab)}
             >
               {tab === "workspace" ? "Workspace" : tab === "import" ? "Import" : tab === "bulk" ? "Bulk Export" : tab === "manager" ? "Manager" : "Settings"}
@@ -469,24 +469,24 @@ export default function App() {
 
         {activeTab === "workspace" && (
           <div className="grid gap-6 lg:grid-cols-[1.05fr_.95fr]">
-            <section className="rounded-3xl border bg-white p-6 shadow-sm">
+            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur>
               <div className="mb-4">
                 <h3 className="text-xl font-semibold">Contact queue</h3>
                 <p className="text-sm text-slate-600">Search and filter the live canvassing list.</p>
               </div>
 
               <div className="mb-4 flex flex-col gap-3 md:flex-row">
-                <div className="flex flex-1 items-center gap-2 rounded-2xl border bg-slate-50 px-4 py-3">
+                <div className="flex flex-1 items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50/90 px-4 py-3 shadow-sm">
                   <Search size={16} />
                   <input className="w-full bg-transparent outline-none" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, suburb, phone, address..." />
                 </div>
-                <div className="flex items-center gap-2 rounded-2xl border bg-slate-50 px-4 py-3">
+                <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50/90 px-4 py-3 shadow-sm">
                   <Filter size={16} />
                   <select className="bg-transparent outline-none" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                     {statuses.map((status) => <option key={status} value={status}>{status}</option>)}
                   </select>
                 </div>
-                <div className="flex items-center gap-2 rounded-2xl border bg-slate-50 px-4 py-3">
+                <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50/90 px-4 py-3 shadow-sm">
                   <Users size={16} />
                   <select className="bg-transparent outline-none" value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)}>
                     <option value="All">All assignees</option>
@@ -503,7 +503,7 @@ export default function App() {
                       setSelectedId(contact.id);
                       setSelectedScript(contact.script);
                     }}
-                    className={`w-full rounded-2xl border p-4 text-left transition ${selectedId === contact.id ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}
+                    className={`w-full rounded-[24px] border p-4 text-left transition ${selectedId === contact.id ? "border-slate-900 bg-gradient-to-r from-slate-50 to-blue-50 shadow-md" : "border-slate-200 bg-white hover:-translate-y-0.5 hover:bg-slate-50 hover:shadow-md"}`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -527,7 +527,7 @@ export default function App() {
               </div>
             </section>
 
-            <section className="rounded-3xl border bg-white p-6 shadow-sm">
+            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur>
               <div className="mb-4">
                 <h3 className="text-xl font-semibold">Contact workspace</h3>
                 <p className="text-sm text-slate-600">Production-style detail panel for your canvasser.</p>
@@ -535,7 +535,7 @@ export default function App() {
 
               {selected && (
                 <>
-                  <div className="rounded-3xl bg-slate-100 p-5">
+                  <div className="rounded-[28px] bg-gradient-to-br from-slate-100 via-white to-blue-50 p-5 ring-1 ring-slate-100">
                     <div className="flex flex-wrap items-center gap-2">
                       <h2 className="text-2xl font-semibold">{selected.name}</h2>
                       <StatusBadge status={selected.status} />
@@ -573,14 +573,14 @@ export default function App() {
 
                   <div className="mt-4">
                     <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-slate-500">WhatsApp draft</label>
-                    <textarea className="min-h-[150px] w-full rounded-2xl border bg-slate-50 p-4 outline-none" readOnly value={draftMessage} />
+                    <textarea className="min-h-[170px] w-full rounded-2xl border border-slate-200 bg-white p-4 outline-none shadow-inner" readOnly value={draftMessage} />
                   </div>
 
                   <div className="mt-4 grid gap-3 md:grid-cols-4">
-                    <ActionButton onClick={copyMessage}><Copy size={16} /> Copy Message</ActionButton>
-                    <ActionButton primary onClick={openWhatsApp}><MessageSquare size={16} /> Open WhatsApp</ActionButton>
+                    <ActionButton glow onClick={copyMessage}><Copy size={16} /> Copy Message</ActionButton>
+                    <ActionButton primary glow onClick={openWhatsApp}><MessageSquare size={16} /> Open WhatsApp</ActionButton>
                     <ActionButton onClick={() => updateSelected({ followUpDue: false, status: selected.status === "New" ? "Waiting" : selected.status, lastContacted: new Date().toISOString().slice(0, 10) })}><Send size={16} /> Log Send</ActionButton>
-                    <ActionButton onClick={nextContact}><ArrowRight size={16} /> Next Contact</ActionButton>
+                    <ActionButton accent onClick={nextContact}><ArrowRight size={16} /> Next Contact</ActionButton>
                   </div>
 
                   <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -601,7 +601,7 @@ export default function App() {
 
         {activeTab === "import" && (
           <div className="grid gap-6 lg:grid-cols-[.95fr_1.05fr]">
-            <section className="rounded-3xl border bg-white p-6 shadow-sm">
+            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur>
               <div className="mb-4">
                 <h3 className="text-xl font-semibold">PropCon import</h3>
                 <p className="text-sm text-slate-600">Cleaner production import flow with CSV upload.</p>
@@ -622,7 +622,7 @@ export default function App() {
               </div>
             </section>
 
-            <section className="rounded-3xl border bg-white p-6 shadow-sm">
+            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur>
               <div className="mb-4">
                 <h3 className="text-xl font-semibold">Import preview</h3>
                 <p className="text-sm text-slate-600">Example layout for incoming PropCon leads.</p>
@@ -657,7 +657,7 @@ export default function App() {
 
         {activeTab === "bulk" && (
           <div className="grid gap-6 lg:grid-cols-[1.05fr_.95fr]">
-            <section className="rounded-3xl border bg-white p-6 shadow-sm">
+            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur>
               <div className="mb-4">
                 <h3 className="text-xl font-semibold">Bulk export builder</h3>
                 <p className="text-sm text-slate-600">Select contacts and prepare a PropCon-friendly batch.</p>
@@ -714,7 +714,7 @@ export default function App() {
               </div>
             </section>
 
-            <section className="rounded-3xl border bg-white p-6 shadow-sm">
+            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur>
               <div className="mb-4">
                 <h3 className="text-xl font-semibold">Export preview</h3>
                 <p className="text-sm text-slate-600">Copy-ready output for PropCon WhatsApp canvassing.</p>
@@ -738,7 +738,7 @@ export default function App() {
 
         {activeTab === "manager" && (
           <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
-            <section className="rounded-3xl border bg-white p-6 shadow-sm">
+            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur>
               <div className="mb-4">
                 <h3 className="text-xl font-semibold">Suburb performance</h3>
                 <p className="text-sm text-slate-600">Quick area-level overview for management.</p>
@@ -761,7 +761,7 @@ export default function App() {
               </div>
             </section>
 
-            <section className="rounded-3xl border bg-white p-6 shadow-sm">
+            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur>
               <div className="mb-4">
                 <h3 className="text-xl font-semibold">Team leaderboard</h3>
                 <p className="text-sm text-slate-600">Simple canvasser performance snapshot.</p>
@@ -791,7 +791,7 @@ export default function App() {
 
         {activeTab === "settings" && (
           <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
-            <section className="rounded-3xl border bg-white p-6 shadow-sm">
+            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur>
               <div className="mb-4">
                 <h3 className="text-xl font-semibold">Runtime settings</h3>
                 <p className="text-sm text-slate-600">Deployment-facing settings panel style.</p>
@@ -804,7 +804,7 @@ export default function App() {
               </div>
             </section>
 
-            <section className="rounded-3xl border bg-white p-6 shadow-sm">
+            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur>
               <div className="mb-4">
                 <h3 className="text-xl font-semibold">Next implementation layer</h3>
                 <p className="text-sm text-slate-600">What this UI is ready to plug into next.</p>
@@ -823,11 +823,11 @@ export default function App() {
 }
 
 function Badge({ children }: { children: React.ReactNode }) {
-  return <span className="inline-flex items-center rounded-full bg-slate-900 px-3 py-1 text-xs text-white">{children}</span>;
+  return <span className="inline-flex items-center rounded-full bg-gradient-to-r from-slate-900 to-blue-700 px-3 py-1 text-xs text-white shadow-sm">{children}</span>;
 }
 
 function OutlineBadge({ children }: { children: React.ReactNode }) {
-  return <span className="inline-flex items-center rounded-full border px-3 py-1 text-xs text-slate-700">{children}</span>;
+  return <span className="inline-flex items-center rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-xs text-slate-700 shadow-sm">{children}</span>;
 }
 
 function StatusBadge({ status }: { status: ContactStatus }) {
@@ -841,11 +841,18 @@ function StatusBadge({ status }: { status: ContactStatus }) {
   return <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${styles[status]}`}>{status}</span>;
 }
 
-function ActionButton({ children, primary, danger, onClick }: { children: React.ReactNode; primary?: boolean; danger?: boolean; onClick?: () => void }) {
+function ActionButton({ children, primary, danger, accent, glow, onClick }: { children: React.ReactNode; primary?: boolean; danger?: boolean; accent?: boolean; glow?: boolean; onClick?: () => void }) {
+  const style = danger
+    ? "bg-gradient-to-r from-rose-600 to-red-500 text-white"
+    : primary
+      ? "bg-gradient-to-r from-slate-900 to-slate-700 text-white"
+      : accent
+        ? "bg-gradient-to-r from-blue-600 to-cyan-500 text-white"
+        : "border border-slate-200 bg-white text-slate-900";
   return (
     <button
       onClick={onClick}
-      className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium transition ${danger ? "bg-rose-600 text-white" : primary ? "bg-slate-900 text-white" : "border bg-white text-slate-900"}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium transition hover:-translate-y-0.5 ${style} ${glow ? "shadow-lg shadow-emerald-100" : "shadow-sm"}`}
     >
       {children}
     </button>
@@ -854,21 +861,21 @@ function ActionButton({ children, primary, danger, onClick }: { children: React.
 
 function MetricCard({ icon, title, value, subtitle }: { icon: React.ReactNode; title: string; value: string; subtitle: string }) {
   return (
-    <div className="rounded-3xl bg-slate-100 p-4">
+    <div className="rounded-[28px] border border-white/70 bg-gradient-to-br from-white to-slate-100 p-4 shadow-sm">
       <div className="flex items-center gap-2 text-xs text-slate-500">{icon} {title}</div>
-      <div className="mt-1 text-2xl font-semibold">{value}</div>
+      <div className="mt-1 text-2xl font-semibold text-slate-900">{value}</div>
       <div className="text-xs text-slate-500">{subtitle}</div>
     </div>
   );
 }
 
 function Rule({ children }: { children: React.ReactNode }) {
-  return <div className="mt-3 rounded-2xl bg-slate-50 p-4 text-sm text-slate-700">{children}</div>;
+  return <div className="mt-3 rounded-2xl border border-slate-100 bg-gradient-to-r from-slate-50 to-blue-50 p-4 text-sm text-slate-700">{children}</div>;
 }
 
 function InfoBox({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <div className="rounded-2xl bg-white p-4 text-sm text-slate-700">
+    <div className="rounded-2xl border border-white/70 bg-white/90 p-4 text-sm text-slate-700 shadow-sm">
       <div className="mb-1 flex items-center gap-2 text-xs text-slate-500">{icon} {label}</div>
       <div className="font-medium text-slate-900">{value}</div>
     </div>
@@ -894,7 +901,7 @@ function TableCell({ children }: { children: React.ReactNode }) {
 
 function MiniInfo({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-2xl bg-slate-100 p-3">
+    <div className="rounded-2xl border border-white/70 bg-gradient-to-br from-slate-50 to-white p-3 shadow-sm">
       <div className="text-xs text-slate-500">{label}</div>
       <div className="mt-1 font-semibold text-slate-900">{value}</div>
     </div>
@@ -903,7 +910,7 @@ function MiniInfo({ label, value }: { label: string; value: number }) {
 
 function SettingRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl bg-slate-50 p-4">
+    <div className="rounded-2xl border border-slate-100 bg-gradient-to-r from-slate-50 to-white p-4 shadow-sm">
       <div className="text-xs text-slate-500">{label}</div>
       <div className="mt-1 font-medium text-slate-900">{value}</div>
     </div>
