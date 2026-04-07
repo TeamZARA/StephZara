@@ -20,16 +20,21 @@ import {
   Star,
   Bot,
   ArrowRight,
+  Building2,
+  UserRound,
   CheckCircle2,
-  Clock3,
+  Sparkles,
+  LayoutGrid,
+  ListChecks,
   BarChart3,
+  Clock3,
 } from "lucide-react";
 
-// Full production-style canvassing UI for StephZara
-// Frontend-only version designed to be easy to deploy, then connect to Supabase later.
+// Safer single-file CRM-style React app.
+// Frontend-only demo structure that is easy to adapt for Vercel once moved into your repo.
 
 type ContactStatus = "New" | "Waiting" | "Interested" | "Appointment" | "Do Not Contact";
-type TabKey = "workspace" | "import" | "bulk" | "manager" | "settings";
+type TabKey = "dashboard" | "workspace" | "pipeline" | "import" | "bulk" | "manager" | "settings";
 
 type Contact = {
   id: string;
@@ -48,6 +53,9 @@ type Contact = {
   optedOut: boolean;
   source: string;
   lastContacted?: string;
+  ownerType?: string;
+  leadTemperature?: "Cold" | "Warm" | "Hot";
+  valuationRange?: string;
 };
 
 const scripts: Record<string, string> = {
@@ -78,6 +86,9 @@ const contactsSeed: Contact[] = [
     optedOut: false,
     source: "PropCon CSV",
     lastContacted: "",
+    ownerType: "Owner Occupier",
+    leadTemperature: "Cold",
+    valuationRange: "R3.8m - R4.2m",
   },
   {
     id: "c2",
@@ -96,6 +107,9 @@ const contactsSeed: Contact[] = [
     optedOut: false,
     source: "PropCon CSV",
     lastContacted: "2026-04-01",
+    ownerType: "Investor",
+    leadTemperature: "Cold",
+    valuationRange: "R5.5m - R6.1m",
   },
   {
     id: "c3",
@@ -108,12 +122,15 @@ const contactsSeed: Contact[] = [
     script: "Property Value",
     assignedTo: "Lerato",
     reply: "Yes, please send recent sales.",
-    notes: "Warm lead",
+    notes: "Warm lead. Wants area stats before next week.",
     followUpDue: false,
     score: 8,
     optedOut: false,
     source: "PropCon CSV",
     lastContacted: "2026-04-02",
+    ownerType: "Owner Occupier",
+    leadTemperature: "Warm",
+    valuationRange: "R2.4m - R2.8m",
   },
   {
     id: "c4",
@@ -126,12 +143,15 @@ const contactsSeed: Contact[] = [
     script: "Appointment Close",
     assignedTo: "Megan",
     reply: "We may sell later this year.",
-    notes: "Appointment pending",
+    notes: "Valuation booked for Friday 10:00.",
     followUpDue: false,
     score: 15,
     optedOut: false,
     source: "PropCon CSV",
     lastContacted: "2026-04-02",
+    ownerType: "Owner Occupier",
+    leadTemperature: "Hot",
+    valuationRange: "R6.7m - R7.4m",
   },
   {
     id: "c5",
@@ -144,22 +164,24 @@ const contactsSeed: Contact[] = [
     script: "Annual Area Report",
     assignedTo: "Lerato",
     reply: "No thanks",
-    notes: "Opted out",
+    notes: "Opted out.",
     followUpDue: false,
     score: 0,
     optedOut: true,
     source: "PropCon CSV",
     lastContacted: "2026-03-31",
+    ownerType: "Owner Occupier",
+    leadTemperature: "Cold",
+    valuationRange: "R4.1m - R4.5m",
   },
 ];
 
 const assignees = ["Lerato", "Megan", "Unassigned"];
 const statuses = ["All", "New", "Waiting", "Interested", "Appointment", "Do Not Contact"];
+const statusOrder: ContactStatus[] = ["New", "Waiting", "Interested", "Appointment", "Do Not Contact"];
 
 function renderTemplate(template: string, contact: Contact) {
-  return template
-    .replaceAll("{{name}}", contact.name || "there")
-    .replaceAll("{{suburb}}", contact.suburb || contact.area || "your area");
+  return template.replace(/\{\{name\}\}/g, contact.name || "there").replace(/\{\{suburb\}\}/g, contact.suburb || contact.area || "your area");
 }
 
 function cleanPhoneForWhatsApp(phone: string) {
@@ -216,9 +238,7 @@ function objectsToCsv(rows: Record<string, unknown>[]) {
   if (!rows.length) return "";
   const headers = Object.keys(rows[0]);
   const lines = [headers.join(",")];
-  rows.forEach((row) => {
-    lines.push(headers.map((h) => csvEscape(row[h])).join(","));
-  });
+  rows.forEach((row) => lines.push(headers.map((h) => csvEscape(row[h])).join(",")));
   return lines.join("\n");
 }
 
@@ -234,6 +254,15 @@ function downloadCsv(filename: string, content: string) {
   URL.revokeObjectURL(url);
 }
 
+function initials(name: string) {
+  return name
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
 export default function App() {
   const [contacts, setContacts] = useState<Contact[]>(contactsSeed);
   const [selectedId, setSelectedId] = useState("c3");
@@ -243,7 +272,7 @@ export default function App() {
   const [bulkScript, setBulkScript] = useState("Recent Sales");
   const [selectedScript, setSelectedScript] = useState("Property Value");
   const [selectedRows, setSelectedRows] = useState<Record<string, boolean>>({});
-  const [activeTab, setActiveTab] = useState<TabKey>("workspace");
+  const [activeTab, setActiveTab] = useState<TabKey>("dashboard");
   const [csvName, setCsvName] = useState("No file selected");
   const fileRef = useRef<HTMLInputElement | null>(null);
 
@@ -251,7 +280,7 @@ export default function App() {
 
   const filtered = useMemo(() => {
     return contacts.filter((c) => {
-      const haystack = [c.name, c.phone, c.suburb, c.address, c.notes, c.assignedTo].join(" ").toLowerCase();
+      const haystack = [c.name, c.phone, c.suburb, c.address, c.notes, c.assignedTo, c.ownerType].join(" ").toLowerCase();
       const matchesSearch = haystack.includes(search.toLowerCase());
       const matchesStatus = statusFilter === "All" ? true : c.status === statusFilter;
       const matchesAssignee = assigneeFilter === "All" ? true : c.assignedTo === assigneeFilter;
@@ -265,11 +294,13 @@ export default function App() {
     const appointments = contacts.filter((c) => c.status === "Appointment").length;
     const replies = contacts.filter((c) => c.reply && c.reply !== "Seen, no reply").length;
     const due = contacts.filter((c) => c.followUpDue && !c.optedOut).length;
+    const warm = contacts.filter((c) => c.leadTemperature === "Warm" || c.leadTemperature === "Hot").length;
     return {
       total,
       interested,
       appointments,
       due,
+      warm,
       replyRate: total ? Math.round((replies / total) * 100) : 0,
       conversionRate: interested ? Math.round((appointments / interested) * 100) : 0,
     };
@@ -286,6 +317,13 @@ export default function App() {
     return Object.values(map).sort((a, b) => b.total - a.total);
   }, [contacts]);
 
+  const pipelineCounts = useMemo(() => {
+    return statusOrder.map((status) => ({
+      status,
+      items: filtered.filter((c) => c.status === status),
+    }));
+  }, [filtered]);
+
   const selectedCount = filtered.filter((c) => selectedRows[c.id]).length;
   const bulkRows = filtered.filter((c) => selectedRows[c.id]);
   const draftMessage = selected ? renderTemplate(scripts[selectedScript], selected) : "";
@@ -297,8 +335,13 @@ export default function App() {
 
   const markStatus = (status: ContactStatus) => {
     if (!selected) return;
-    const score = status === "Interested" ? 8 : status === "Appointment" ? 15 : 0;
-    updateSelected({ status, score, optedOut: status === "Do Not Contact" });
+    const score = status === "Interested" ? 8 : status === "Appointment" ? 15 : status === "Waiting" ? 1 : 0;
+    updateSelected({
+      status,
+      score,
+      optedOut: status === "Do Not Contact",
+      leadTemperature: status === "Appointment" ? "Hot" : status === "Interested" ? "Warm" : selected.leadTemperature,
+    });
   };
 
   const copyMessage = async () => {
@@ -339,31 +382,35 @@ export default function App() {
     const headers = rows[0].map((h) => String(h || "").trim().toLowerCase());
     const body = rows.slice(1).filter((r) => r.some((cell) => String(cell || "").trim() !== ""));
 
-    const imported = body.map((row, index): Contact => {
-      const get = (candidates: string[]) => {
-        const idx = headers.findIndex((h) => candidates.some((cand) => h.includes(cand)));
-        return idx >= 0 ? String(row[idx] || "").trim() : "";
-      };
-
-      return {
-        id: `imp-${Date.now()}-${index}`,
-        name: get(["name", "owner", "contact"]),
-        phone: get(["phone", "mobile", "cell", "whatsapp"]),
-        suburb: get(["suburb", "area", "location"]),
-        area: get(["area", "suburb"]),
-        address: get(["address", "street"]),
-        status: "New",
-        script: "Recent Sales",
-        assignedTo: "Unassigned",
-        reply: "",
-        notes: get(["notes", "comments", "memo"]),
-        followUpDue: true,
-        score: 0,
-        optedOut: false,
-        source: "PropCon CSV",
-        lastContacted: "",
-      };
-    }).filter((r) => r.name || r.phone || r.address);
+    const imported = body
+      .map((row, index): Contact => {
+        const get = (candidates: string[]) => {
+          const idx = headers.findIndex((h) => candidates.some((cand) => h.includes(cand)));
+          return idx >= 0 ? String(row[idx] || "").trim() : "";
+        };
+        return {
+          id: `imp-${Date.now()}-${index}`,
+          name: get(["name", "owner", "contact"]),
+          phone: get(["phone", "mobile", "cell", "whatsapp"]),
+          suburb: get(["suburb", "area", "location"]),
+          area: get(["area", "suburb"]),
+          address: get(["address", "street"]),
+          status: "New",
+          script: "Recent Sales",
+          assignedTo: "Unassigned",
+          reply: "",
+          notes: get(["notes", "comments", "memo"]),
+          followUpDue: true,
+          score: 0,
+          optedOut: false,
+          source: "PropCon CSV",
+          lastContacted: "",
+          ownerType: "Unknown",
+          leadTemperature: "Cold",
+          valuationRange: "Pending",
+        };
+      })
+      .filter((r) => r.name || r.phone || r.address);
 
     if (imported.length) {
       setContacts((prev) => [...imported, ...prev]);
@@ -402,27 +449,32 @@ export default function App() {
       OptedOut: c.optedOut ? "Yes" : "No",
       Source: c.source,
       LastContacted: c.lastContacted || "",
+      OwnerType: c.ownerType || "",
+      LeadTemperature: c.leadTemperature || "",
+      ValuationRange: c.valuationRange || "",
     }));
     downloadCsv("propcon_canvassing_register.csv", objectsToCsv(rows));
   };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.14),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.12),_transparent_24%),linear-gradient(180deg,#f8fbff_0%,#eef5ff_48%,#f8fafc_100%)] p-4 md:p-8">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.14),transparent_28%),radial-gradient(circle_at_top_right,rgba(16,185,129,0.12),transparent_24%),linear-gradient(180deg,#f8fbff_0%,#eef5ff_48%,#f8fafc_100%)] p-4 md:p-8">
       <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => void handleCsvFile(e.target.files?.[0] || null)} />
 
       <div className="mx-auto max-w-7xl space-y-6">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="grid gap-4 lg:grid-cols-[1.35fr_.85fr]">
-          <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur>
+          <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
             <div className="mb-3 flex flex-wrap gap-2">
-              <Badge>Production System</Badge>
+              <Badge>CRM Dashboard</Badge>
               <OutlineBadge>PropCon Friendly</OutlineBadge>
               <OutlineBadge>WhatsApp Workflow</OutlineBadge>
+              <OutlineBadge>Canvasser View</OutlineBadge>
             </div>
+
             <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
               <div>
-                <h1 className="text-3xl font-semibold tracking-tight text-slate-900 md:text-5xl">StephZara Canvasser Hub</h1>
+                <h1 className="text-3xl font-semibold tracking-tight text-slate-900 md:text-5xl">StephZara CRM</h1>
                 <p className="mt-2 max-w-2xl text-sm text-slate-600 md:text-base">
-                  Full production-style interface for importing PropCon leads, preparing copy-ready WhatsApp messages, assigning canvassers, managing follow-ups, and tracking suburb performance.
+                  A brighter, more user-friendly canvassing CRM for PropCon lead imports, follow-ups, WhatsApp messaging, suburb tracking, and manager oversight.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -430,46 +482,120 @@ export default function App() {
                 <ActionButton onClick={exportRegister}><Download size={16} /> Export Register</ActionButton>
               </div>
             </div>
-            <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+
+            <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
               <MetricCard icon={<Users size={16} />} title="Contacts" value={String(metrics.total)} subtitle="active records" />
               <MetricCard icon={<MessageSquare size={16} />} title="Reply Rate" value={`${metrics.replyRate}%`} subtitle="engaged replies" />
               <MetricCard icon={<CalendarDays size={16} />} title="Appointments" value={String(metrics.appointments)} subtitle="booked leads" />
               <MetricCard icon={<Bell size={16} />} title="Follow-ups" value={String(metrics.due)} subtitle="due today" />
+              <MetricCard icon={<Sparkles size={16} />} title="Warm Leads" value={String(metrics.warm)} subtitle="warm or hot" />
             </div>
           </section>
 
-          <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur>
+          <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
             <div className="mb-4">
               <h3 className="flex items-center gap-2 text-lg font-semibold"><ShieldCheck size={18} /> Safe canvassing rules</h3>
-              <p className="mt-1 text-sm text-slate-600">Designed for a real human canvasser workflow.</p>
+              <p className="mt-1 text-sm text-slate-600">Designed for a real human-led CRM workflow.</p>
             </div>
             <Rule>Start with short text-only outreach.</Rule>
             <Rule>Only send reports or images after a reply.</Rule>
             <Rule>Opt-out instantly on NO or stop request.</Rule>
-            <Rule>Use suburb-based campaigns to stay focused.</Rule>
+            <Rule>Use suburb campaigns to stay area-focused.</Rule>
             <Rule>Managers review due follow-ups daily.</Rule>
-            <div className="mt-3 rounded-2xl bg-slate-100 p-4">
+            <div className="mt-3 rounded-2xl border border-slate-100 bg-gradient-to-r from-slate-50 to-emerald-50 p-4">
               <div className="mb-1 flex items-center gap-2 font-medium"><Bot size={16} /> Bot handoff path</div>
-              <div className="text-xs text-slate-600">Intro message → reply detected → canvasser takeover → appointment or archive</div>
+              <div className="text-xs text-slate-600">Intro message → reply detected → canvasser takeover → valuation or archive</div>
             </div>
           </section>
         </motion.div>
 
-        <div className="grid grid-cols-2 gap-2 rounded-[24px] border border-white/70 bg-white/90 p-2 shadow-[0_18px_40px_rgba(15,23,42,0.08)] backdrop-blur md:grid-cols-5">
-          {(["workspace", "import", "bulk", "manager", "settings"] as TabKey[]).map((tab) => (
+        <div className="grid grid-cols-2 gap-2 rounded-[24px] border border-white/70 bg-white/90 p-2 shadow-[0_18px_40px_rgba(15,23,42,0.08)] backdrop-blur md:grid-cols-7">
+          {([
+            ["dashboard", "Dashboard", LayoutGrid],
+            ["workspace", "Workspace", MessageSquare],
+            ["pipeline", "Pipeline", ListChecks],
+            ["import", "Import", Upload],
+            ["bulk", "Bulk Export", Download],
+            ["manager", "Manager", BarChart3],
+            ["settings", "Settings", Building2],
+          ] as [TabKey, string, React.ComponentType<{ size?: number }>][]) .map(([tab, label, Icon]) => (
             <button
               key={tab}
-              className={`rounded-2xl px-4 py-3 text-sm font-medium transition ${activeTab === tab ? "bg-gradient-to-r from-slate-900 to-slate-700 text-white shadow" : "text-slate-500 hover:bg-slate-50"}`}
+              className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium transition ${activeTab === tab ? "bg-gradient-to-r from-slate-900 to-slate-700 text-white shadow" : "text-slate-500 hover:bg-slate-50"}`}
               onClick={() => setActiveTab(tab)}
             >
-              {tab === "workspace" ? "Workspace" : tab === "import" ? "Import" : tab === "bulk" ? "Bulk Export" : tab === "manager" ? "Manager" : "Settings"}
+              <Icon size={16} /> {label}
             </button>
           ))}
         </div>
 
+        {activeTab === "dashboard" && (
+          <div className="grid gap-6 lg:grid-cols-[1.05fr_.95fr]">
+            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-semibold">Today’s focus</h3>
+                  <p className="text-sm text-slate-600">Quick CRM snapshot for canvassing momentum.</p>
+                </div>
+                <OutlineBadge>{metrics.due} due today</OutlineBadge>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <HighlightCard title="Priority queue" value={`${contacts.filter((c) => c.followUpDue && !c.optedOut).length} leads`} note="Follow-ups needing action today" icon={<Clock3 size={18} />} />
+                <HighlightCard title="Hot opportunities" value={`${contacts.filter((c) => c.leadTemperature === "Hot").length} leads`} note="Best chance of valuations or appointments" icon={<Sparkles size={18} />} />
+                <HighlightCard title="Manager view" value={`${contacts.filter((c) => c.status === "Appointment").length} booked`} note="Appointments scheduled across canvassers" icon={<CalendarDays size={18} />} />
+                <HighlightCard title="Area spread" value={`${suburbRows.length} suburbs`} note="Campaigns currently represented" icon={<MapPin size={18} />} />
+              </div>
+              <div className="mt-5 rounded-[28px] border border-slate-100 bg-gradient-to-r from-slate-50 to-blue-50 p-5">
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-semibold">Next best contact</div>
+                    <div className="text-xs text-slate-500">Use this to move faster through the day.</div>
+                  </div>
+                  <ActionButton accent onClick={() => setActiveTab("workspace")}><ArrowRight size={16} /> Open workspace</ActionButton>
+                </div>
+                <div className="rounded-2xl bg-white p-4 shadow-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <Avatar name={selected.name} />
+                      <div>
+                        <div className="font-medium text-slate-900">{selected.name}</div>
+                        <div className="text-sm text-slate-500">{selected.suburb} · {selected.valuationRange}</div>
+                      </div>
+                    </div>
+                    <StatusBadge status={selected.status} />
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
+              <div className="mb-4">
+                <h3 className="text-xl font-semibold">Quick suburb performance</h3>
+                <p className="text-sm text-slate-600">Where the current campaign is getting the best movement.</p>
+              </div>
+              <div className="space-y-4">
+                {suburbRows.map((row) => {
+                  const rate = row.total ? Math.round((row.interested / row.total) * 100) : 0;
+                  return (
+                    <div key={row.suburb}>
+                      <div className="mb-2 flex items-center justify-between text-sm">
+                        <span>{row.suburb}</span>
+                        <span>{row.appointments} appointments · {row.interested} interested</span>
+                      </div>
+                      <div className="h-3 overflow-hidden rounded-full bg-slate-200">
+                        <div className="h-full rounded-full bg-gradient-to-r from-blue-600 to-cyan-400" style={{ width: `${rate}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          </div>
+        )}
+
         {activeTab === "workspace" && (
           <div className="grid gap-6 lg:grid-cols-[1.05fr_.95fr]">
-            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur>
+            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
               <div className="mb-4">
                 <h3 className="text-xl font-semibold">Contact queue</h3>
                 <p className="text-sm text-slate-600">Search and filter the live canvassing list.</p>
@@ -506,19 +632,22 @@ export default function App() {
                     className={`w-full rounded-[24px] border p-4 text-left transition ${selectedId === contact.id ? "border-slate-900 bg-gradient-to-r from-slate-50 to-blue-50 shadow-md" : "border-slate-200 bg-white hover:-translate-y-0.5 hover:bg-slate-50 hover:shadow-md"}`}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <div className="font-medium">{contact.name}</div>
-                          <StatusBadge status={contact.status} />
-                          {contact.followUpDue && !contact.optedOut ? <OutlineBadge>Due</OutlineBadge> : null}
-                          {contact.optedOut ? <OutlineBadge>Opted Out</OutlineBadge> : null}
+                      <div className="flex items-start gap-3">
+                        <Avatar name={contact.name} />
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="font-medium">{contact.name}</div>
+                            <StatusBadge status={contact.status} />
+                            {contact.followUpDue && !contact.optedOut ? <OutlineBadge>Due</OutlineBadge> : null}
+                            {contact.optedOut ? <OutlineBadge>Opted Out</OutlineBadge> : null}
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-3 text-sm text-slate-600">
+                            <span className="inline-flex items-center gap-1"><Phone size={14} /> {contact.phone}</span>
+                            <span className="inline-flex items-center gap-1"><MapPin size={14} /> {contact.suburb}</span>
+                            <span className="inline-flex items-center gap-1"><Users size={14} /> {contact.assignedTo || "Unassigned"}</span>
+                          </div>
+                          <div className="mt-2 text-xs text-slate-500">{contact.address} · {contact.ownerType}</div>
                         </div>
-                        <div className="mt-2 flex flex-wrap gap-3 text-sm text-slate-600">
-                          <span className="inline-flex items-center gap-1"><Phone size={14} /> {contact.phone}</span>
-                          <span className="inline-flex items-center gap-1"><MapPin size={14} /> {contact.suburb}</span>
-                          <span className="inline-flex items-center gap-1"><Users size={14} /> {contact.assignedTo || "Unassigned"}</span>
-                        </div>
-                        <div className="mt-2 text-xs text-slate-500">{contact.address}</div>
                       </div>
                       <ChevronRight size={18} className="text-slate-400" />
                     </div>
@@ -527,25 +656,34 @@ export default function App() {
               </div>
             </section>
 
-            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur>
-              <div className="mb-4">
-                <h3 className="text-xl font-semibold">Contact workspace</h3>
-                <p className="text-sm text-slate-600">Production-style detail panel for your canvasser.</p>
+            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-xl font-semibold">Contact workspace</h3>
+                  <p className="text-sm text-slate-600">CRM detail panel for your canvasser.</p>
+                </div>
+                <OutlineBadge>{selected.leadTemperature || "Cold"}</OutlineBadge>
               </div>
 
               {selected && (
                 <>
                   <div className="rounded-[28px] bg-gradient-to-br from-slate-100 via-white to-blue-50 p-5 ring-1 ring-slate-100">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-2xl font-semibold">{selected.name}</h2>
-                      <StatusBadge status={selected.status} />
-                      {selected.optedOut ? <OutlineBadge>Do Not Contact</OutlineBadge> : null}
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Avatar name={selected.name} large />
+                      <div>
+                        <h2 className="text-2xl font-semibold">{selected.name}</h2>
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          <StatusBadge status={selected.status} />
+                          {selected.optedOut ? <OutlineBadge>Do Not Contact</OutlineBadge> : null}
+                          <OutlineBadge>{selected.valuationRange || "Pending valuation"}</OutlineBadge>
+                        </div>
+                      </div>
                     </div>
                     <div className="mt-4 grid gap-3 md:grid-cols-2">
                       <InfoBox icon={<Phone size={15} />} label="Phone" value={selected.phone} />
                       <InfoBox icon={<MapPin size={15} />} label="Suburb" value={selected.suburb} />
-                      <InfoBox icon={<MapPin size={15} />} label="Address" value={selected.address} />
-                      <InfoBox icon={<Users size={15} />} label="Assigned To" value={selected.assignedTo} />
+                      <InfoBox icon={<Building2 size={15} />} label="Address" value={selected.address} />
+                      <InfoBox icon={<UserRound size={15} />} label="Assigned To" value={selected.assignedTo} />
                     </div>
                   </div>
 
@@ -571,8 +709,11 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="mt-4">
-                    <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-slate-500">WhatsApp draft</label>
+                  <div className="mt-4 rounded-[28px] border border-slate-200 bg-gradient-to-br from-white to-emerald-50/40 p-4 shadow-sm">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <label className="block text-xs font-medium uppercase tracking-wide text-slate-500">WhatsApp draft</label>
+                      <OutlineBadge>{selectedScript}</OutlineBadge>
+                    </div>
                     <textarea className="min-h-[170px] w-full rounded-2xl border border-slate-200 bg-white p-4 outline-none shadow-inner" readOnly value={draftMessage} />
                   </div>
 
@@ -599,14 +740,44 @@ export default function App() {
           </div>
         )}
 
+        {activeTab === "pipeline" && (
+          <div className="grid gap-4 xl:grid-cols-5">
+            {pipelineCounts.map((column) => (
+              <section key={column.status} className="rounded-[32px] border border-white/70 bg-white/90 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
+                <div className="mb-4 flex items-center justify-between">
+                  <div className="font-semibold text-slate-900">{column.status}</div>
+                  <OutlineBadge>{column.items.length}</OutlineBadge>
+                </div>
+                <div className="space-y-3">
+                  {column.items.map((contact) => (
+                    <button key={contact.id} onClick={() => { setSelectedId(contact.id); setSelectedScript(contact.script); setActiveTab("workspace"); }} className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+                      <div className="flex items-center gap-3">
+                        <Avatar name={contact.name} />
+                        <div className="min-w-0">
+                          <div className="truncate font-medium text-slate-900">{contact.name}</div>
+                          <div className="truncate text-xs text-slate-500">{contact.suburb}</div>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
+                        <span>{contact.assignedTo}</span>
+                        <span>{contact.leadTemperature || "Cold"}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        )}
+
         {activeTab === "import" && (
           <div className="grid gap-6 lg:grid-cols-[.95fr_1.05fr]">
-            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur>
+            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
               <div className="mb-4">
                 <h3 className="text-xl font-semibold">PropCon import</h3>
-                <p className="text-sm text-slate-600">Cleaner production import flow with CSV upload.</p>
+                <p className="text-sm text-slate-600">Cleaner CRM-style import flow with CSV upload.</p>
               </div>
-              <div className="rounded-3xl border border-dashed border-slate-300 p-8 text-center">
+              <div className="rounded-3xl border border-dashed border-slate-300 bg-gradient-to-br from-slate-50 to-blue-50 p-8 text-center">
                 <FileSpreadsheet className="mx-auto h-10 w-10 text-slate-400" />
                 <div className="mt-3 text-sm font-medium">Selected file</div>
                 <div className="mt-1 text-sm text-slate-500">{csvName}</div>
@@ -622,12 +793,12 @@ export default function App() {
               </div>
             </section>
 
-            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur>
+            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
               <div className="mb-4">
                 <h3 className="text-xl font-semibold">Import preview</h3>
                 <p className="text-sm text-slate-600">Example layout for incoming PropCon leads.</p>
               </div>
-              <div className="overflow-auto rounded-3xl border">
+              <div className="overflow-auto rounded-[28px] border border-slate-200 shadow-sm">
                 <table className="min-w-full text-sm">
                   <thead className="bg-slate-50">
                     <tr>
@@ -657,7 +828,7 @@ export default function App() {
 
         {activeTab === "bulk" && (
           <div className="grid gap-6 lg:grid-cols-[1.05fr_.95fr]">
-            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur>
+            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
               <div className="mb-4">
                 <h3 className="text-xl font-semibold">Bulk export builder</h3>
                 <p className="text-sm text-slate-600">Select contacts and prepare a PropCon-friendly batch.</p>
@@ -686,7 +857,7 @@ export default function App() {
                 <ActionButton primary onClick={exportBatch}><Download size={16} /> Export CSV</ActionButton>
               </div>
 
-              <div className="overflow-auto rounded-3xl border">
+              <div className="overflow-auto rounded-[28px] border border-slate-200 shadow-sm">
                 <table className="min-w-full text-sm">
                   <thead className="bg-slate-50">
                     <tr>
@@ -714,21 +885,19 @@ export default function App() {
               </div>
             </section>
 
-            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur>
+            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
               <div className="mb-4">
                 <h3 className="text-xl font-semibold">Export preview</h3>
                 <p className="text-sm text-slate-600">Copy-ready output for PropCon WhatsApp canvassing.</p>
               </div>
               <div className="space-y-3">
                 {bulkRows.length ? bulkRows.map((row) => (
-                  <div key={row.id} className="rounded-2xl border bg-white p-4 text-xs text-slate-700">
+                  <div key={row.id} className="rounded-2xl border bg-white p-4 text-xs text-slate-700 shadow-sm">
                     <div className="mb-2 flex items-center justify-between">
                       <div className="font-medium text-slate-900">{row.name}</div>
                       <OutlineBadge>{row.suburb}</OutlineBadge>
                     </div>
-                    <div className="font-mono break-words">
-                      {row.name} | {row.phone} | {row.suburb} | {row.address} | {renderTemplate(scripts[bulkScript], row)}
-                    </div>
+                    <div className="font-mono break-words">{row.name} | {row.phone} | {row.suburb} | {row.address} | {renderTemplate(scripts[bulkScript], row)}</div>
                   </div>
                 )) : <div className="rounded-2xl bg-slate-100 p-8 text-center text-slate-600">Select contacts to preview the exported PropCon rows.</div>}
               </div>
@@ -738,7 +907,7 @@ export default function App() {
 
         {activeTab === "manager" && (
           <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
-            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur>
+            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
               <div className="mb-4">
                 <h3 className="text-xl font-semibold">Suburb performance</h3>
                 <p className="text-sm text-slate-600">Quick area-level overview for management.</p>
@@ -753,7 +922,7 @@ export default function App() {
                         <span>{row.appointments} appointments · {row.interested} interested</span>
                       </div>
                       <div className="h-3 overflow-hidden rounded-full bg-slate-200">
-                        <div className="h-full rounded-full bg-slate-900" style={{ width: `${rate}%` }} />
+                        <div className="h-full rounded-full bg-gradient-to-r from-blue-600 to-cyan-400" style={{ width: `${rate}%` }} />
                       </div>
                     </div>
                   );
@@ -761,7 +930,7 @@ export default function App() {
               </div>
             </section>
 
-            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur>
+            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
               <div className="mb-4">
                 <h3 className="text-xl font-semibold">Team leaderboard</h3>
                 <p className="text-sm text-slate-600">Simple canvasser performance snapshot.</p>
@@ -771,7 +940,7 @@ export default function App() {
                   const rows = contacts.filter((c) => c.assignedTo === name);
                   const score = rows.reduce((sum, row) => sum + row.score, 0);
                   return (
-                    <div key={name} className="rounded-2xl border bg-white p-4">
+                    <div key={name} className="rounded-2xl border bg-white p-4 shadow-sm">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2 font-medium"><Star size={14} /> {index + 1}. {name}</div>
                         <Badge>{score} pts</Badge>
@@ -791,20 +960,20 @@ export default function App() {
 
         {activeTab === "settings" && (
           <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
-            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur>
+            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
               <div className="mb-4">
                 <h3 className="text-xl font-semibold">Runtime settings</h3>
                 <p className="text-sm text-slate-600">Deployment-facing settings panel style.</p>
               </div>
               <div className="space-y-3 text-sm text-slate-700">
-                <SettingRow label="Mode" value="Production UI Preview" />
+                <SettingRow label="Mode" value="Production CRM Preview" />
                 <SettingRow label="Data Source" value="PropCon CSV + Supabase ready" />
                 <SettingRow label="Export Format" value="PropCon-friendly batch rows" />
                 <SettingRow label="WhatsApp Flow" value="Human-first, copy/send workflow" />
               </div>
             </section>
 
-            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur>
+            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
               <div className="mb-4">
                 <h3 className="text-xl font-semibold">Next implementation layer</h3>
                 <p className="text-sm text-slate-600">What this UI is ready to plug into next.</p>
@@ -818,6 +987,14 @@ export default function App() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function Avatar({ name, large }: { name: string; large?: boolean }) {
+  return (
+    <div className={`inline-flex items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-400 font-semibold text-white shadow ${large ? "h-14 w-14 text-base" : "h-11 w-11 text-sm"}`}>
+      {initials(name)}
     </div>
   );
 }
@@ -849,14 +1026,7 @@ function ActionButton({ children, primary, danger, accent, glow, onClick }: { ch
       : accent
         ? "bg-gradient-to-r from-blue-600 to-cyan-500 text-white"
         : "border border-slate-200 bg-white text-slate-900";
-  return (
-    <button
-      onClick={onClick}
-      className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium transition hover:-translate-y-0.5 ${style} ${glow ? "shadow-lg shadow-emerald-100" : "shadow-sm"}`}
-    >
-      {children}
-    </button>
-  );
+  return <button onClick={onClick} className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium transition hover:-translate-y-0.5 ${style} ${glow ? "shadow-lg shadow-emerald-100" : "shadow-sm"}`}>{children}</button>;
 }
 
 function MetricCard({ icon, title, value, subtitle }: { icon: React.ReactNode; title: string; value: string; subtitle: string }) {
@@ -865,6 +1035,16 @@ function MetricCard({ icon, title, value, subtitle }: { icon: React.ReactNode; t
       <div className="flex items-center gap-2 text-xs text-slate-500">{icon} {title}</div>
       <div className="mt-1 text-2xl font-semibold text-slate-900">{value}</div>
       <div className="text-xs text-slate-500">{subtitle}</div>
+    </div>
+  );
+}
+
+function HighlightCard({ title, value, note, icon }: { title: string; value: string; note: string; icon: React.ReactNode }) {
+  return (
+    <div className="rounded-[28px] border border-white/70 bg-white p-5 shadow-sm">
+      <div className="flex items-center gap-2 text-sm font-medium text-slate-600">{icon} {title}</div>
+      <div className="mt-2 text-2xl font-semibold text-slate-900">{value}</div>
+      <div className="mt-1 text-xs text-slate-500">{note}</div>
     </div>
   );
 }
