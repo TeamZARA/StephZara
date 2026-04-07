@@ -43,9 +43,9 @@ type ScriptTemplate = {
   content: string;
 };
 
-const STORAGE_CONTACTS_KEY = "stephzara_contacts_v2";
-const STORAGE_SCRIPTS_KEY = "stephzara_scripts_v2";
-const STORAGE_CSV_NAME_KEY = "stephzara_csv_name_v2";
+const STORAGE_CONTACTS_KEY = "stephzara_contacts_v3";
+const STORAGE_SCRIPTS_KEY = "stephzara_scripts_v3";
+const STORAGE_CSV_NAME_KEY = "stephzara_csv_name_v3";
 
 const seed: ContactRecord[] = [
   {
@@ -147,10 +147,10 @@ const seed: ContactRecord[] = [
 ];
 
 const defaultScripts: ScriptTemplate[] = [
-  { id: "s1", name: "Buyer Enquiry", category: "Canvassing", content: "Hi {{full_name}}, quick one — I’m working with a buyer looking in {{suburb}}. Would you consider selling if the price made sense?" },
-  { id: "s2", name: "Recent Sales", category: "Canvassing", content: "Hi {{full_name}}, I’ve just updated recent sales in {{suburb}}. Would you like me to send you what properties near you are selling for?" },
-  { id: "s3", name: "Property Value", category: "Valuation", content: "Hi {{full_name}}, have you seen what homes in {{suburb}} are selling for lately?" },
-  { id: "s4", name: "Appointment Close", category: "Appointment", content: "Thanks {{full_name}}. I can arrange a quick no-obligation valuation for your property in {{suburb}}. What day would suit you best?" },
+  { id: "s1", name: "Buyer Enquiry", category: "Canvassing", content: "Hi {{full_name}}, quick one — I’m working with a buyer looking in your area. Would you consider selling if the price made sense?" },
+  { id: "s2", name: "Recent Sales", category: "Canvassing", content: "Hi {{full_name}}, I’ve just updated recent sales near your property. Would you like me to send you what properties close by are selling for?" },
+  { id: "s3", name: "Property Value", category: "Valuation", content: "Hi {{full_name}}, have you seen what homes in your area are selling for lately?" },
+  { id: "s4", name: "Appointment Close", category: "Appointment", content: "Thanks {{full_name}}. I can arrange a quick no-obligation valuation for your property. What day would suit you best?" },
 ];
 
 const csvFieldDefs = [
@@ -207,20 +207,6 @@ function renderScript(content: string, record: ContactRecord) {
     .replace(/\{\{address\}\}/g, record.address)
     .replace(/\{\{category\}\}/g, record.category)
     .replace(/\{\{type\}\}/g, record.type);
-}
-
-function statusColors(status: Status) {
-  if (status === "New") return { bg: "#e2e8f0", color: "#334155" };
-  if (status === "Waiting") return { bg: "#fef3c7", color: "#92400e" };
-  if (status === "Interested") return { bg: "#dcfce7", color: "#166534" };
-  if (status === "Appointment") return { bg: "#dbeafe", color: "#1d4ed8" };
-  return { bg: "#ffe4e6", color: "#be123c" };
-}
-
-function tempColor(temp: ContactRecord["temperature"]) {
-  if (temp === "Hot") return "#ef4444";
-  if (temp === "Warm") return "#f59e0b";
-  return "#94a3b8";
 }
 
 function parseCsv(text: string): string[][] {
@@ -325,6 +311,7 @@ export default function App() {
     return obj;
   });
   const [bulkQueueIndex, setBulkQueueIndex] = useState(0);
+  const [bulkDrafts, setBulkDrafts] = useState<Record<string, { scriptId: string; message: string }>>({});
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -365,7 +352,6 @@ export default function App() {
         record.modified,
         record.lastContacted,
       ].join(" ").toLowerCase();
-
       const quickMatch = quickHay.includes(quickSearch.toLowerCase());
       const fieldMatch = csvFieldDefs.every((field) => {
         const value = fieldSearch[field.key] || "";
@@ -383,6 +369,22 @@ export default function App() {
   const bulkTargets = filtered.filter((r) => selectedBulk[r.id]);
   const bulkTarget = bulkTargets[bulkQueueIndex] || null;
 
+  useEffect(() => {
+    if (!bulkTargets.length) return;
+    setBulkDrafts((prev) => {
+      const next = { ...prev };
+      bulkTargets.forEach((record) => {
+        if (!next[record.id]) {
+          next[record.id] = {
+            scriptId: selectedScriptId,
+            message: renderScript(selectedScript.content, record),
+          };
+        }
+      });
+      return next;
+    });
+  }, [bulkTargets, selectedScriptId, selectedScript, filtered]);
+
   const stats = {
     total: records.length,
     due: records.filter((r) => r.followUpDue && r.status !== "Do Not Contact").length,
@@ -390,11 +392,6 @@ export default function App() {
     interested: records.filter((r) => r.status === "Interested").length,
     appointments: records.filter((r) => r.status === "Appointment").length,
   };
-
-  const pipeline = ["New", "Waiting", "Interested", "Appointment", "Do Not Contact"].map((status) => ({
-    status: status as Status,
-    items: records.filter((r) => r.status === status),
-  }));
 
   const copyMessage = async () => {
     try {
@@ -408,26 +405,6 @@ export default function App() {
   const openWhatsApp = () => {
     const phoneSource = selected.cell || selected.phone;
     window.open(buildWhatsAppUrl(phoneSource, message), "_blank");
-  };
-
-  const nextLead = () => {
-    const idx = filtered.findIndex((r) => r.id === selected.id);
-    if (idx >= 0 && idx < filtered.length - 1) setSelectedId(filtered[idx + 1].id);
-  };
-
-  const markStatus = (status: Status) => {
-    setRecords((prev) =>
-      prev.map((r) =>
-        r.id === selected.id
-          ? {
-              ...r,
-              status,
-              followUpDue: status === "Waiting",
-              temperature: status === "Appointment" ? "Hot" : status === "Interested" ? "Warm" : r.temperature,
-            }
-          : r
-      )
-    );
   };
 
   const exportRegister = () => {
@@ -469,9 +446,8 @@ export default function App() {
       Cell: r.cell,
       Address: r.address,
       Phone: r.phone,
-      Message: renderScript(selectedScript.content, r),
-      ScriptName: selectedScript.name,
-      WhatsAppLink: buildWhatsAppUrl(r.cell || r.phone, renderScript(selectedScript.content, r)),
+      Script: scripts.find((s) => s.id === (bulkDrafts[r.id]?.scriptId || selectedScriptId))?.name || "",
+      Message: bulkDrafts[r.id]?.message || renderScript(selectedScript.content, r),
     }));
     if (!rows.length) {
       alert("Select at least one contact first");
@@ -487,35 +463,73 @@ export default function App() {
     }
     setBulkQueueIndex(0);
     setView("bulk");
-    const first = bulkTargets[0];
-    const firstMessage = `[${selectedScript.name}]\n${renderScript(selectedScript.content, first)}`;
-    window.open(buildWhatsAppUrl(first.cell || first.phone, firstMessage), "_blank");
   };
 
-  const openNextBulkWhatsApp = () => {
-    if (!bulkTargets.length) {
-      alert("No bulk contacts selected");
-      return;
-    }
-    const nextIndex = bulkQueueIndex + 1;
-    if (nextIndex >= bulkTargets.length) {
-      alert("You have opened all selected WhatsApp messages");
-      return;
-    }
-    setBulkQueueIndex(nextIndex);
-    const target = bulkTargets[nextIndex];
-    const msg = `[${selectedScript.name}]\n${renderScript(selectedScript.content, target)}`;
-    window.open(buildWhatsAppUrl(target.cell || target.phone, msg), "_blank");
+  const openCurrentBulkWhatsApp = () => {
+    if (!bulkTarget) return;
+    const draft = bulkDrafts[bulkTarget.id];
+    const outgoing = draft?.message || renderScript(selectedScript.content, bulkTarget);
+    window.open(buildWhatsAppUrl(bulkTarget.cell || bulkTarget.phone, outgoing), "_blank");
   };
 
   const copyCurrentBulkMessage = async () => {
     if (!bulkTarget) return;
     try {
-      await navigator.clipboard.writeText(`[${selectedScript.name}]\n${renderScript(selectedScript.content, bulkTarget)}`);
+      await navigator.clipboard.writeText(bulkDrafts[bulkTarget.id]?.message || renderScript(selectedScript.content, bulkTarget));
       alert("Bulk message copied");
     } catch {
       alert("Could not copy bulk message");
     }
+  };
+
+  const markBulkSentAndNext = () => {
+    if (!bulkTarget) return;
+    setRecords((prev) => prev.map((r) => (r.id === bulkTarget.id ? { ...r, followUpDue: false, lastContacted: new Date().toISOString().slice(0, 10) } : r)));
+    if (bulkQueueIndex < bulkTargets.length - 1) {
+      setBulkQueueIndex((prev) => prev + 1);
+    } else {
+      alert("Bulk queue complete");
+    }
+  };
+
+  const skipBulkAndNext = () => {
+    if (!bulkTarget) return;
+    if (bulkQueueIndex < bulkTargets.length - 1) {
+      setBulkQueueIndex((prev) => prev + 1);
+    } else {
+      alert("No more contacts in queue");
+    }
+  };
+
+  const prevBulk = () => {
+    if (bulkQueueIndex > 0) setBulkQueueIndex((prev) => prev - 1);
+  };
+
+  const nextBulk = () => {
+    if (bulkQueueIndex < bulkTargets.length - 1) setBulkQueueIndex((prev) => prev + 1);
+  };
+
+  const updateBulkDraftScript = (recordId: string, scriptId: string) => {
+    const record = records.find((r) => r.id === recordId);
+    const script = scripts.find((s) => s.id === scriptId);
+    if (!record || !script) return;
+    setBulkDrafts((prev) => ({
+      ...prev,
+      [recordId]: {
+        scriptId,
+        message: renderScript(script.content, record),
+      },
+    }));
+  };
+
+  const updateBulkDraftMessage = (recordId: string, messageText: string) => {
+    setBulkDrafts((prev) => ({
+      ...prev,
+      [recordId]: {
+        scriptId: prev[recordId]?.scriptId || selectedScriptId,
+        message: messageText,
+      },
+    }));
   };
 
   const handleImportClick = () => fileRef.current?.click();
@@ -640,9 +654,9 @@ export default function App() {
           <section style={styles.hero}>
             <div style={styles.heroTop}>
               <div>
-                <div style={styles.heroTag}>✨ Search fields now line up next to each other</div>
+                <div style={styles.heroTag}>✨ One-by-one PropCon-style bulk WhatsApp queue</div>
                 <h1 style={styles.heroTitle}>Lead Management Dashboard</h1>
-                <p style={styles.heroText}>Imported CSV files are now saved in the browser so you can come back to them, and bulk send opens WhatsApp with the selected script name and phone number already prepared.</p>
+                <p style={styles.heroText}>Select contacts, open a bulk queue, edit each message, choose a script for each person, and send one by one through WhatsApp desktop or app.</p>
               </div>
               <div style={styles.heroButtons}>
                 <button onClick={handleImportClick} style={styles.whiteButton}>📤 Import CSV</button>
@@ -663,30 +677,21 @@ export default function App() {
               <div style={styles.cardHeader}>
                 <div>
                   <h2 style={styles.cardTitle}>Contacts</h2>
-                  <div style={styles.cardSub}>Each CSV heading has its own search field, arranged next to each other in a wide grid.</div>
+                  <div style={styles.cardSub}>Choose the contacts you want in the queue, then open Bulk Send.</div>
                 </div>
                 <div style={styles.topBadge}>{filtered.length} results • {csvName}</div>
               </div>
-
               <div style={styles.contactsSearchGridUltraWide}>
                 <SearchField label="Quick Search" value={quickSearch} onChange={setQuickSearch} placeholder="Search all fields" />
                 {csvFieldDefs.map((field) => (
-                  <SearchField
-                    key={field.key}
-                    label={field.label}
-                    value={fieldSearch[field.key] || ""}
-                    onChange={(value) => setFieldSearch((prev) => ({ ...prev, [field.key]: value }))}
-                    placeholder={field.label}
-                  />
+                  <SearchField key={field.key} label={field.label} value={fieldSearch[field.key] || ""} onChange={(value) => setFieldSearch((prev) => ({ ...prev, [field.key]: value }))} placeholder={field.label} />
                 ))}
               </div>
-
               <div style={styles.contactsActionsRow}>
                 <button onClick={() => { const next: Record<string, boolean> = {}; filtered.forEach((r) => { next[r.id] = true; }); setSelectedBulk(next); setBulkQueueIndex(0); }} style={styles.secondaryAction}>Select All Results</button>
                 <button onClick={() => { setSelectedBulk({}); setBulkQueueIndex(0); }} style={styles.secondaryAction}>Clear Selection</button>
                 <button onClick={openBulkSend} style={styles.darkButton}>Open Bulk Send</button>
               </div>
-
               <div style={styles.tableWrap}>
                 <table style={styles.table}>
                   <thead>
@@ -715,7 +720,7 @@ export default function App() {
                 <div style={styles.listArea}>
                   {scripts.map((item) => (
                     <button key={item.id} onClick={() => setSelectedScriptId(item.id)} style={{ ...styles.scriptCard, ...(selectedScriptId === item.id ? styles.leadCardActive : {}) }}>
-                      <div style={styles.previewHead}><div style={styles.previewName}>{item.name}</div><Tag text={item.category} /></div>
+                      <div style={styles.previewHead}><div style={styles.previewName}>{item.name}</div><span style={styles.tag}>{item.category}</span></div>
                       <div style={styles.previewMessage}>{item.content}</div>
                     </button>
                   ))}
@@ -747,91 +752,88 @@ export default function App() {
           {view === "bulk" && (
             <div style={styles.twoCol}>
               <section style={styles.card}>
-                <div style={styles.cardHeader}><div><h2 style={styles.cardTitle}>Bulk Send Builder</h2><div style={styles.cardSub}>Open WhatsApp one selected contact at a time with the script name placed at the top of the message.</div></div><button onClick={exportBulk} style={styles.darkButton}>📥 Export CSV</button></div>
-                <div style={styles.formGrid}>
+                <div style={styles.cardHeader}>
                   <div>
-                    <label style={styles.label}>Script for bulk batch</label>
-                    <select value={selectedScriptId} onChange={(e) => setSelectedScriptId(e.target.value)} style={styles.select}>
-                      {scripts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
+                    <h2 style={styles.cardTitle}>Bulk WhatsApp Queue</h2>
+                    <div style={styles.cardSub}>Review one selected contact at a time, edit the message, then open WhatsApp manually.</div>
                   </div>
-                  <div>
-                    <label style={styles.label}>Selected Contacts</label>
-                    <input value={`${bulkTargets.length} selected`} readOnly style={styles.input} />
-                  </div>
+                  <button onClick={exportBulk} style={styles.darkButton}>📥 Export CSV</button>
                 </div>
+
                 <div style={styles.bulkActionBar}>
-                  <button onClick={openBulkSend} style={styles.whatsAppAction}>Open First in WhatsApp</button>
-                  <button onClick={openNextBulkWhatsApp} style={styles.darkButton}>Open Next</button>
-                  <button onClick={copyCurrentBulkMessage} style={styles.secondaryAction}>Copy Current Message</button>
+                  <button onClick={prevBulk} style={styles.secondaryAction}>Previous</button>
+                  <button onClick={nextBulk} style={styles.secondaryAction}>Next</button>
+                  <button onClick={openCurrentBulkWhatsApp} style={styles.whatsAppAction}>Open in WhatsApp</button>
+                  <button onClick={copyCurrentBulkMessage} style={styles.secondaryAction}>Copy Message</button>
+                  <button onClick={markBulkSentAndNext} style={styles.darkButton}>Mark Sent + Next</button>
+                  <button onClick={skipBulkAndNext} style={styles.secondaryAction}>Skip</button>
                 </div>
+
                 <div style={styles.bulkInfoBox}>
                   {bulkTarget ? (
                     <>
-                      <div style={styles.previewHead}><div style={styles.previewName}>Current Queue Item: {bulkQueueIndex + 1} / {bulkTargets.length}</div><Tag text={selectedScript.name} /></div>
-                      <div style={{ ...styles.previewMessage, marginBottom: 8 }}><strong>{fullName(bulkTarget)}</strong> · {bulkTarget.cell || bulkTarget.phone}</div>
-                      <div style={styles.previewMessage}>{`[${selectedScript.name}]\n${renderScript(selectedScript.content, bulkTarget)}`}</div>
+                      <div style={styles.previewHead}>
+                        <div style={styles.previewName}>Queue Item {bulkQueueIndex + 1} / {bulkTargets.length}</div>
+                        <span style={styles.tag}>{fullName(bulkTarget)}</span>
+                      </div>
+                      <div style={styles.bulkQueueMetaGrid}>
+                        <div style={styles.infoTile}><div style={styles.infoLabel}>Cell</div><div style={styles.infoValue}>{bulkTarget.cell || bulkTarget.phone}</div></div>
+                        <div style={styles.infoTile}><div style={styles.infoLabel}>Agent</div><div style={styles.infoValue}>{bulkTarget.agents || bulkTarget.assignee}</div></div>
+                        <div style={styles.infoTile}><div style={styles.infoLabel}>Category</div><div style={styles.infoValue}>{bulkTarget.category}</div></div>
+                        <div style={styles.infoTile}><div style={styles.infoLabel}>Address</div><div style={styles.infoValue}>{bulkTarget.address}</div></div>
+                      </div>
+                      <div style={{ marginTop: 16 }}>
+                        <label style={styles.label}>Script for this contact</label>
+                        <select
+                          value={bulkDrafts[bulkTarget.id]?.scriptId || selectedScriptId}
+                          onChange={(e) => updateBulkDraftScript(bulkTarget.id, e.target.value)}
+                          style={styles.select}
+                        >
+                          {scripts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                      </div>
+                      <div style={{ marginTop: 16 }}>
+                        <label style={styles.label}>Edit message before opening WhatsApp</label>
+                        <textarea
+                          value={bulkDrafts[bulkTarget.id]?.message || ""}
+                          onChange={(e) => updateBulkDraftMessage(bulkTarget.id, e.target.value)}
+                          style={styles.textarea}
+                        />
+                      </div>
                     </>
                   ) : (
                     <div style={styles.emptyBox}>Select contacts in Contacts first, then open Bulk Send.</div>
                   )}
                 </div>
-                <div style={styles.tableWrap}>
-                  <table style={styles.table}>
-                    <thead>
-                      <tr>
-                        <th style={styles.th}></th>
-                        <th style={styles.th}>Category</th>
-                        <th style={styles.th}>Name</th>
-                        <th style={styles.th}>Surname</th>
-                        <th style={styles.th}>Cell</th>
-                        <th style={styles.th}>WhatsApp</th>
-                        <th style={styles.th}>Agents</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filtered.map((record) => (
-                        <tr key={record.id}>
-                          <td style={styles.td}><input type="checkbox" checked={!!selectedBulk[record.id]} onChange={() => setSelectedBulk((prev) => ({ ...prev, [record.id]: !prev[record.id] }))} /></td>
-                          <td style={styles.td}>{record.category}</td>
-                          <td style={styles.td}>{record.name}</td>
-                          <td style={styles.td}>{record.surname}</td>
-                          <td style={styles.td}>{record.cell}</td>
-                          <td style={styles.td}>{record.whatsApp}</td>
-                          <td style={styles.td}>{record.agents}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
               </section>
+
               <section style={styles.card}>
-                <div style={styles.cardHeader}><div><h2 style={styles.cardTitle}>Preview Panel</h2><div style={styles.cardSub}>Each selected contact gets their own WhatsApp-ready message.</div></div></div>
+                <div style={styles.cardHeader}><div><h2 style={styles.cardTitle}>Selected Queue</h2><div style={styles.cardSub}>All selected contacts appear here. Click any one to jump straight to it.</div></div><div style={styles.topBadge}>{bulkTargets.length} selected</div></div>
                 <div style={styles.previewStack}>
                   {bulkTargets.length ? bulkTargets.map((record, index) => (
-                    <div key={record.id} style={styles.previewCard}>
-                      <div style={styles.previewHead}><div style={styles.previewName}>{index + 1}. {fullName(record)}</div><Tag text={selectedScript.name} /></div>
+                    <button
+                      key={record.id}
+                      onClick={() => setBulkQueueIndex(index)}
+                      style={{ ...styles.previewCard, ...(bulkQueueIndex === index ? styles.leadCardActive : {}) }}
+                    >
+                      <div style={styles.previewHead}><div style={styles.previewName}>{index + 1}. {fullName(record)}</div><span style={styles.tag}>{scripts.find((s) => s.id === (bulkDrafts[record.id]?.scriptId || selectedScriptId))?.name || "Script"}</span></div>
                       <div style={{ ...styles.previewMessage, marginBottom: 8 }}>{record.cell || record.phone}</div>
-                      <div style={styles.previewMessage}>{`[${selectedScript.name}]\n${renderScript(selectedScript.content, record)}`}</div>
-                    </div>
-                  )) : <div style={styles.emptyBox}>Select contacts to preview the batch.</div>}
+                      <div style={styles.previewMessage}>{bulkDrafts[record.id]?.message || renderScript(selectedScript.content, record)}</div>
+                    </button>
+                  )) : <div style={styles.emptyBox}>Select contacts to build your send queue.</div>}
                 </div>
               </section>
             </div>
           )}
 
-          {view === "dashboard" && <div style={styles.emptyBox}>Dashboard remains available. Use Contacts for the CSV heading search workflow and Bulk Send for WhatsApp queue sending.</div>}
-          {view === "leads" && <div style={styles.emptyBox}>Lead Desk remains available in the repo version. This update focused on your saved CSV + side-by-side search + WhatsApp bulk queue request.</div>}
-          {view === "pipeline" && <div style={styles.emptyBox}>Pipeline remains available in the repo version. This update focused on your saved CSV + side-by-side search + WhatsApp bulk queue request.</div>}
-          {view === "manager" && <div style={styles.emptyBox}>Manager view remains available in the repo version. This update focused on your saved CSV + side-by-side search + WhatsApp bulk queue request.</div>}
+          {view === "dashboard" && <div style={styles.emptyBox}>Dashboard remains available. Use Contacts to select people and Bulk Send for the one-by-one WhatsApp queue.</div>}
+          {view === "leads" && <div style={styles.emptyBox}>Lead Desk remains available in the repo version. This update focused on the safer PropCon-style one-by-one bulk WhatsApp workflow you asked for.</div>}
+          {view === "pipeline" && <div style={styles.emptyBox}>Pipeline remains available in the repo version. This update focused on the safer PropCon-style one-by-one bulk WhatsApp workflow you asked for.</div>}
+          {view === "manager" && <div style={styles.emptyBox}>Manager view remains available in the repo version. This update focused on the safer PropCon-style one-by-one bulk WhatsApp workflow you asked for.</div>}
         </main>
       </div>
     </div>
   );
-}
-
-function Avatar({ initials, large }: { initials: string; large?: boolean }) {
-  return <div style={{ ...styles.avatar, ...(large ? styles.avatarLarge : {}) }}>{initials}</div>;
 }
 
 function MetricCard({ title, value, bg }: { title: string; value: number; bg: string }) {
@@ -840,15 +842,6 @@ function MetricCard({ title, value, bg }: { title: string; value: number; bg: st
 
 function FocusCard({ title, value, subtitle, gradient }: { title: string; value: string; subtitle: string; gradient: string }) {
   return <div style={styles.focusCard}><div style={{ ...styles.focusIcon, background: gradient }} /><div style={styles.focusCardTitle}>{title}</div><div style={styles.focusCardValue}>{value}</div><div style={styles.focusCardSub}>{subtitle}</div></div>;
-}
-
-function StatusPill({ status }: { status: Status }) {
-  const c = statusColors(status);
-  return <span style={{ ...styles.statusPill, background: c.bg, color: c.color }}>{status}</span>;
-}
-
-function Tag({ text }: { text: string }) {
-  return <span style={styles.tag}>{text}</span>;
 }
 
 function SearchField({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder: string }) {
@@ -899,20 +892,11 @@ const styles: Record<string, React.CSSProperties> = {
   focusCardTitle: { fontSize: 14, fontWeight: 600, color: "#64748b" },
   focusCardValue: { marginTop: 10, fontSize: 28, fontWeight: 700, color: "#0f172a" },
   focusCardSub: { marginTop: 6, fontSize: 12, color: "#64748b" },
-  bestLeadBox: { borderRadius: 30, background: "linear-gradient(135deg,#eef2ff 0%,#ffffff 50%,#ecfeff 100%)", padding: 20 },
-  bestLeadTop: { display: "flex", gap: 16, alignItems: "center" },
-  bestLeadName: { fontSize: 22, fontWeight: 700 },
-  bestLeadMeta: { marginTop: 4, fontSize: 14, color: "#64748b" },
-  tagRow: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 },
-  actionRow3: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 16 },
-  secondaryAction: { borderRadius: 18, border: "1px solid #e2e8f0", background: "white", color: "#0f172a", padding: "14px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer", boxShadow: "0 6px 16px rgba(15,23,42,0.05)" },
-  whatsAppAction: { borderRadius: 18, border: "none", background: "linear-gradient(90deg,#10b981 0%,#06b6d4 100%)", color: "white", padding: "14px 16px", fontSize: 14, fontWeight: 700, cursor: "pointer", boxShadow: "0 14px 28px rgba(16,185,129,0.25)" },
-  darkButton: { borderRadius: 18, background: "#0f172a", color: "white", border: "none", padding: "12px 16px", fontSize: 14, fontWeight: 700, cursor: "pointer", boxShadow: "0 12px 24px rgba(15,23,42,0.16)" },
-  darkButtonWide: { borderRadius: 18, background: "linear-gradient(90deg,#0f172a 0%,#334155 100%)", color: "white", border: "none", padding: "14px 16px", fontSize: 14, fontWeight: 700, cursor: "pointer", boxShadow: "0 12px 24px rgba(15,23,42,0.16)" },
   contactsSearchGridUltraWide: { display: "grid", gridTemplateColumns: "repeat(6, minmax(180px, 1fr))", gap: 12, marginBottom: 18, alignItems: "end" },
   contactsActionsRow: { display: "flex", gap: 12, marginBottom: 18, flexWrap: "wrap" },
-  bulkActionBar: { display: "flex", gap: 12, flexWrap: "wrap", marginTop: 18, marginBottom: 18 },
+  bulkActionBar: { display: "flex", gap: 12, flexWrap: "wrap", marginTop: 10, marginBottom: 18 },
   bulkInfoBox: { borderRadius: 20, border: "1px solid #e2e8f0", background: "linear-gradient(135deg,#ffffff 0%,#f0fdf4 100%)", padding: 16, marginBottom: 18 },
+  bulkQueueMetaGrid: { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 },
   tableWrap: { overflow: "auto", borderRadius: 28, border: "1px solid #e2e8f0" },
   table: { width: "100%", borderCollapse: "collapse" as const, fontSize: 14 },
   th: { background: "#f8fafc", color: "#475569", textAlign: "left" as const, padding: "14px 16px", fontWeight: 600, whiteSpace: "nowrap" },
@@ -924,16 +908,18 @@ const styles: Record<string, React.CSSProperties> = {
   previewName: { fontWeight: 700, color: "#0f172a" },
   previewMessage: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 12, color: "#475569", lineHeight: 1.5 },
   previewStack: { display: "grid", gap: 12 },
-  previewCard: { borderRadius: 18, border: "1px solid #e2e8f0", background: "linear-gradient(135deg,#ffffff 0%,#f8fafc 100%)", padding: 16, boxShadow: "0 6px 14px rgba(15,23,42,0.04)" },
+  previewCard: { borderRadius: 18, border: "1px solid #e2e8f0", background: "linear-gradient(135deg,#ffffff 0%,#f8fafc 100%)", padding: 16, boxShadow: "0 6px 14px rgba(15,23,42,0.04)", textAlign: "left", cursor: "pointer" },
   scriptCard: { width: "100%", borderRadius: 18, border: "1px solid #e2e8f0", background: "linear-gradient(135deg,#ffffff 0%,#f8fafc 100%)", padding: 16, textAlign: "left", cursor: "pointer", boxShadow: "0 6px 14px rgba(15,23,42,0.04)", marginBottom: 12 },
   emptyBox: { borderRadius: 18, background: "#f1f5f9", color: "#64748b", padding: 32, textAlign: "center" as const, fontSize: 14 },
   avatar: { width: 44, height: 44, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg,#2563eb 0%,#06b6d4 100%)", color: "white", fontWeight: 700, boxShadow: "0 12px 24px rgba(37,99,235,0.2)", flexShrink: 0 },
   avatarLarge: { width: 58, height: 58, fontSize: 18, borderRadius: 18 },
-  statusPill: { borderRadius: 999, padding: "6px 12px", fontSize: 12, fontWeight: 700, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.04)" },
   tag: { borderRadius: 999, padding: "6px 12px", fontSize: 12, fontWeight: 600, color: "#475569", background: "white", border: "1px solid #e2e8f0", boxShadow: "0 4px 10px rgba(15,23,42,0.04)" },
   label: { display: "block", marginBottom: 8, fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.18em" },
   input: { width: "100%", borderRadius: 18, border: "1px solid #e2e8f0", background: "white", padding: "14px 16px", fontSize: 14, boxShadow: "0 6px 14px rgba(15,23,42,0.04)", outline: "none", boxSizing: "border-box" },
   select: { width: "100%", borderRadius: 18, border: "1px solid #e2e8f0", background: "white", padding: "14px 16px", fontSize: 14, boxShadow: "0 6px 14px rgba(15,23,42,0.04)", outline: "none" },
   textarea: { width: "100%", minHeight: 180, borderRadius: 18, border: "1px solid #e2e8f0", background: "white", padding: 16, fontSize: 14, boxShadow: "inset 0 2px 6px rgba(15,23,42,0.05)", outline: "none", resize: "vertical" as const, boxSizing: "border-box" },
   formGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 20 },
+  infoTile: { borderRadius: 18, border: "1px solid #e2e8f0", background: "white", padding: "12px 14px", boxShadow: "0 6px 14px rgba(15,23,42,0.04)" },
+  infoLabel: { fontSize: 11, textTransform: "uppercase", letterSpacing: "0.14em", color: "#64748b", marginBottom: 6 },
+  infoValue: { fontSize: 14, fontWeight: 600, color: "#0f172a" },
 };
