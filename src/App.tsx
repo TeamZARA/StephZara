@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 
 type Status = "New" | "Waiting" | "Interested" | "Appointment" | "Do Not Contact";
 type View = "dashboard" | "leads" | "pipeline" | "bulk" | "manager";
@@ -15,14 +15,16 @@ type Lead = {
   valueBand: string;
   notes: string;
   reply: string;
+  followUpDue: boolean;
+  source: string;
 };
 
 const leadsSeed: Lead[] = [
-  { id: "1", name: "Janine Smith", phone: "+27 82 555 0141", suburb: "Durbanville", address: "12 Oak Street", status: "New", assignee: "Lerato", temperature: "Cold", valueBand: "R3.8m - R4.2m", notes: "Fresh PropCon import", reply: "" },
-  { id: "2", name: "Peter Jacobs", phone: "+27 83 555 0198", suburb: "Blouberg", address: "85 Marine Road", status: "Waiting", assignee: "Lerato", temperature: "Cold", valueBand: "R5.5m - R6.1m", notes: "Follow-up today", reply: "Seen, no reply" },
-  { id: "3", name: "Ayesha Daniels", phone: "+27 81 555 0102", suburb: "Parklands", address: "44 Sandpiper Ave", status: "Interested", assignee: "Lerato", temperature: "Warm", valueBand: "R2.4m - R2.8m", notes: "Warm lead", reply: "Please send recent sales." },
-  { id: "4", name: "Gavin Naidoo", phone: "+27 72 555 0135", suburb: "Table View", address: "17 Beach Road", status: "Appointment", assignee: "Megan", temperature: "Hot", valueBand: "R6.7m - R7.4m", notes: "Valuation booked", reply: "Friday works." },
-  { id: "5", name: "Melissa van Wyk", phone: "+27 79 555 0180", suburb: "Milnerton", address: "23 Sunset Drive", status: "Do Not Contact", assignee: "Lerato", temperature: "Cold", valueBand: "R4.1m - R4.5m", notes: "Opted out", reply: "No thanks" },
+  { id: "1", name: "Janine Smith", phone: "+27 82 555 0141", suburb: "Durbanville", address: "12 Oak Street", status: "New", assignee: "Lerato", temperature: "Cold", valueBand: "R3.8m - R4.2m", notes: "Fresh PropCon import", reply: "", followUpDue: true, source: "PropCon CSV" },
+  { id: "2", name: "Peter Jacobs", phone: "+27 83 555 0198", suburb: "Blouberg", address: "85 Marine Road", status: "Waiting", assignee: "Lerato", temperature: "Cold", valueBand: "R5.5m - R6.1m", notes: "Follow-up today", reply: "Seen, no reply", followUpDue: true, source: "PropCon CSV" },
+  { id: "3", name: "Ayesha Daniels", phone: "+27 81 555 0102", suburb: "Parklands", address: "44 Sandpiper Ave", status: "Interested", assignee: "Lerato", temperature: "Warm", valueBand: "R2.4m - R2.8m", notes: "Warm lead", reply: "Please send recent sales.", followUpDue: false, source: "PropCon CSV" },
+  { id: "4", name: "Gavin Naidoo", phone: "+27 72 555 0135", suburb: "Table View", address: "17 Beach Road", status: "Appointment", assignee: "Megan", temperature: "Hot", valueBand: "R6.7m - R7.4m", notes: "Valuation booked", reply: "Friday works.", followUpDue: false, source: "PropCon CSV" },
+  { id: "5", name: "Melissa van Wyk", phone: "+27 79 555 0180", suburb: "Milnerton", address: "23 Sunset Drive", status: "Do Not Contact", assignee: "Lerato", temperature: "Cold", valueBand: "R4.1m - R4.5m", notes: "Opted out", reply: "No thanks", followUpDue: false, source: "PropCon CSV" },
 ];
 
 const scripts: Record<string, string> = {
@@ -67,6 +69,74 @@ function tempColor(temp: Lead["temperature"]) {
   return "#94a3b8";
 }
 
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    const next = text[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        cell += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === "," && !inQuotes) {
+      row.push(cell);
+      cell = "";
+    } else if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && next === "\n") i += 1;
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+    } else {
+      cell += char;
+    }
+  }
+
+  if (cell.length || row.length) {
+    row.push(cell);
+    rows.push(row);
+  }
+
+  return rows;
+}
+
+function csvEscape(value: unknown) {
+  const str = String(value ?? "");
+  if (/[",\n]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
+  return str;
+}
+
+function objectsToCsv(rows: Record<string, unknown>[]) {
+  if (!rows.length) return "";
+  const headers = Object.keys(rows[0]);
+  const lines = [headers.join(",")];
+  rows.forEach((row) => {
+    lines.push(headers.map((h) => csvEscape(row[h])).join(","));
+  });
+  return lines.join("\n");
+}
+
+function downloadCsv(filename: string, rows: Record<string, unknown>[]) {
+  const csv = objectsToCsv(rows);
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export default function App() {
   const [view, setView] = useState<View>("dashboard");
   const [search, setSearch] = useState("");
@@ -74,6 +144,8 @@ export default function App() {
   const [selectedId, setSelectedId] = useState("3");
   const [script, setScript] = useState("Property Value");
   const [selectedBulk, setSelectedBulk] = useState<Record<string, boolean>>({});
+  const [csvName, setCsvName] = useState("No file selected");
+  const fileRef = useRef<HTMLInputElement | null>(null);
 
   const filtered = useMemo(() => {
     return leads.filter((lead) => {
@@ -87,7 +159,7 @@ export default function App() {
 
   const stats = {
     total: leads.length,
-    due: leads.filter((l) => l.status === "Waiting").length,
+    due: leads.filter((l) => l.followUpDue && l.status !== "Do Not Contact").length,
     hot: leads.filter((l) => l.temperature === "Hot").length,
     interested: leads.filter((l) => l.status === "Interested").length,
     appointments: leads.filter((l) => l.status === "Appointment").length,
@@ -128,6 +200,7 @@ export default function App() {
           ? {
               ...l,
               status,
+              followUpDue: status === "Waiting",
               temperature: status === "Appointment" ? "Hot" : status === "Interested" ? "Warm" : l.temperature,
             }
           : l
@@ -138,21 +211,110 @@ export default function App() {
   const exportBulk = () => {
     const rows = filtered
       .filter((l) => selectedBulk[l.id])
-      .map((l) => `${l.name},${l.phone},${l.suburb},${l.address},${renderScript(scripts[script], l)}`);
-    const csv = ["Name,Phone,Suburb,Address,Message", ...rows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "propcon_bulk_export.csv";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+      .map((l) => ({
+        Name: l.name,
+        Phone: l.phone,
+        Suburb: l.suburb,
+        Address: l.address,
+        Message: renderScript(scripts[script], l),
+      }));
+
+    if (!rows.length) {
+      alert("Select at least one lead first");
+      return;
+    }
+
+    downloadCsv("propcon_bulk_export.csv", rows);
+  };
+
+  const exportRegister = () => {
+    const rows = leads.map((l) => ({
+      Name: l.name,
+      Phone: l.phone,
+      Suburb: l.suburb,
+      Address: l.address,
+      Status: l.status,
+      Assignee: l.assignee,
+      Temperature: l.temperature,
+      ValueBand: l.valueBand,
+      Notes: l.notes,
+      Reply: l.reply,
+      FollowUpDue: l.followUpDue ? "Yes" : "No",
+      Source: l.source,
+    }));
+
+    downloadCsv("propcon_register.csv", rows);
+  };
+
+  const handleImportClick = () => fileRef.current?.click();
+
+  const handleCsvFile = async (file: File | null) => {
+    if (!file) return;
+    setCsvName(file.name);
+    const text = await file.text();
+    const rows = parseCsv(text);
+    if (rows.length < 2) return;
+
+    const headers = rows[0].map((h) => String(h || "").trim().toLowerCase());
+    const body = rows.slice(1).filter((r) => r.some((cell) => String(cell || "").trim() !== ""));
+
+    const imported: Lead[] = body
+      .map((row, index) => {
+        const get = (candidates: string[]) => {
+          const idx = headers.findIndex((h) => candidates.some((cand) => h.includes(cand)));
+          return idx >= 0 ? String(row[idx] || "").trim() : "";
+        };
+
+        return {
+          id: `import-${Date.now()}-${index}`,
+          name: get(["name", "owner", "contact"]),
+          phone: get(["phone", "cell", "mobile", "whatsapp"]),
+          suburb: get(["suburb", "area", "location"]),
+          address: get(["address", "street"]),
+          status: "New" as Status,
+          assignee: "Unassigned",
+          temperature: "Cold" as const,
+          valueBand: "Pending",
+          notes: get(["notes", "comments", "memo"]),
+          reply: "",
+          followUpDue: true,
+          source: "Imported CSV",
+        };
+      })
+      .filter((lead) => lead.name || lead.phone || lead.address);
+
+    if (!imported.length) {
+      alert("No usable rows found in that CSV");
+      return;
+    }
+
+    setLeads((prev) => [...imported, ...prev]);
+    setSelectedId(imported[0].id);
+    setCsvName(file.name);
+    alert(`${imported.length} leads imported`);
+  };
+
+  const openFollowUps = () => {
+    setSearch("");
+    const waiting = leads.filter((l) => l.followUpDue && l.status !== "Do Not Contact");
+    if (waiting.length) {
+      setSelectedId(waiting[0].id);
+      setView("leads");
+    } else {
+      alert("No follow-ups due right now");
+    }
   };
 
   return (
     <div style={styles.page}>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".csv,text/csv"
+        style={{ display: "none" }}
+        onChange={(e) => void handleCsvFile(e.target.files?.[0] || null)}
+      />
+
       <div style={styles.layout}>
         <aside style={styles.sidebar}>
           <div style={styles.sidebarHeader}>
@@ -186,6 +348,7 @@ export default function App() {
               <div style={styles.darkRow}><span>Follow-ups</span><strong>{stats.due}</strong></div>
               <div style={styles.darkRow}><span>Hot leads</span><strong>{stats.hot}</strong></div>
               <div style={styles.darkRow}><span>Booked</span><strong>{stats.appointments}</strong></div>
+              <button onClick={openFollowUps} style={{ ...styles.whiteButton, width: "100%", marginTop: 8 }}>Open Follow Ups</button>
             </div>
           </div>
         </aside>
@@ -201,8 +364,8 @@ export default function App() {
                 </p>
               </div>
               <div style={styles.heroButtons}>
-                <button style={styles.whiteButton}>📤 Import CSV</button>
-                <button style={styles.ghostButton}>📥 Export Register</button>
+                <button onClick={handleImportClick} style={styles.whiteButton}>📤 Import CSV</button>
+                <button onClick={exportRegister} style={styles.ghostButton}>📥 Export Register</button>
               </div>
             </div>
 
@@ -326,6 +489,7 @@ export default function App() {
                               <span style={styles.footerSmall}>{lead.temperature}</span>
                               <span style={styles.footerDot}>•</span>
                               <span style={styles.footerSmall}>{lead.assignee}</span>
+                              {lead.followUpDue ? <span style={{ ...styles.footerSmall, color: "#be123c" }}>• Follow up</span> : null}
                             </div>
                           </div>
                         </div>
@@ -363,7 +527,7 @@ export default function App() {
                       <InfoTile label="Phone" value={selected.phone} />
                       <InfoTile label="Assigned" value={selected.assignee} />
                       <InfoTile label="Suburb" value={selected.suburb} />
-                      <InfoTile label="Source" value="PropCon CSV" />
+                      <InfoTile label="Source" value={selected.source} />
                     </div>
                   </div>
                 </div>
@@ -409,7 +573,18 @@ export default function App() {
                   <div style={styles.actionRow3}>
                     <button onClick={copyMessage} style={styles.secondaryAction}>📋 Copy Message</button>
                     <button onClick={openWhatsApp} style={styles.whatsAppAction}>💬 Open WhatsApp</button>
-                    <button style={styles.darkButtonWide}>📨 Log Send</button>
+                    <button
+                      onClick={() =>
+                        setLeads((prev) =>
+                          prev.map((l) =>
+                            l.id === selected.id ? { ...l, followUpDue: false, status: l.status === "New" ? "Waiting" : l.status } : l
+                          )
+                        )
+                      }
+                      style={styles.darkButtonWide}
+                    >
+                      📨 Log Send
+                    </button>
                   </div>
                 </div>
 
@@ -1095,6 +1270,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 8,
     alignItems: "center",
     marginTop: 10,
+    flexWrap: "wrap",
   },
   footerSmall: {
     fontSize: 12,
