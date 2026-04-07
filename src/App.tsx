@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Copy, MessageSquare } from "lucide-react";
+import { Copy, MessageSquare, ArrowRight } from "lucide-react";
 
 type Contact = {
   id: string;
@@ -8,7 +8,7 @@ type Contact = {
   suburb: string;
 };
 
-const contacts: Contact[] = [
+const initialContacts: Contact[] = [
   {
     id: "1",
     name: "Janine Smith",
@@ -21,6 +21,12 @@ const contacts: Contact[] = [
     phone: "+27 83 555 0198",
     suburb: "Blouberg",
   },
+  {
+    id: "3",
+    name: "Amanda Botha",
+    phone: "+27 84 555 0112",
+    suburb: "Table View",
+  }
 ];
 
 function renderTemplate(contact: Contact) {
@@ -38,110 +44,98 @@ function buildWhatsAppLink(phone: string, message: string) {
 }
 
 export default function App() {
-  const [selectedId, setSelectedId] = useState("1");
+  const [contacts, setContacts] = useState(initialContacts);
+  const [currentIndex, setCurrentIndex] = useState(0);
 
-  const selected = useMemo(
-    () => contacts.find((c) => c.id === selectedId) || contacts[0],
-    [selectedId]
-  );
+  const current = contacts[currentIndex];
 
-  const draftMessage = renderTemplate(selected);
+  const draftMessage = useMemo(() => {
+    if (!current) return "";
+    return renderTemplate(current);
+  }, [current]);
 
   const copyMessage = async () => {
     try {
       await navigator.clipboard.writeText(draftMessage);
       alert("Message copied");
     } catch {
-      alert("Could not copy message");
+      alert("Copy failed");
     }
   };
 
   const openWhatsApp = () => {
-    const url = buildWhatsAppLink(selected.phone, draftMessage);
+    const url = buildWhatsAppLink(current.phone, draftMessage);
     window.open(url, "_blank");
   };
 
-  return (
-    <div style={{ padding: 20, maxWidth: 700, margin: "0 auto" }}>
-      <h1>StephZara App</h1>
+  const nextContact = () => {
+    if (currentIndex < contacts.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+    } else {
+      alert("No more contacts");
+    }
+  };
 
+  return (
+    <div style={{ maxWidth: 800, margin: "0 auto", padding: 20 }}>
+      <h1>StephZara Canvassing System</h1>
+
+      {/* CONTACT LIST */}
       <div style={{ marginBottom: 20 }}>
-        {contacts.map((contact) => (
-          <button
-            key={contact.id}
-            onClick={() => setSelectedId(contact.id)}
+        <h3>Contacts</h3>
+        {contacts.map((c, i) => (
+          <div
+            key={c.id}
             style={{
-              display: "block",
-              width: "100%",
-              padding: 12,
-              marginBottom: 10,
-              textAlign: "left",
-              borderRadius: 10,
+              padding: 10,
+              marginBottom: 8,
               border: "1px solid #ddd",
-              background: selectedId === contact.id ? "#f3f4f6" : "white",
-              cursor: "pointer",
+              borderRadius: 8,
+              background: i === currentIndex ? "#eef2ff" : "white"
             }}
           >
-            {contact.name} — {contact.suburb}
-          </button>
+            {c.name} — {c.suburb}
+          </div>
         ))}
       </div>
 
-      <div style={{ padding: 16, border: "1px solid #ddd", borderRadius: 12 }}>
-        <h2>{selected.name}</h2>
-        <p>{selected.phone}</p>
+      {/* CURRENT CONTACT */}
+      {current && (
+        <div style={{ border: "1px solid #ddd", padding: 20, borderRadius: 10 }}>
+          <h2>{current.name}</h2>
+          <p>{current.phone}</p>
+          <p>{current.suburb}</p>
 
-        <textarea
-          value={draftMessage}
-          readOnly
-          style={{
-            width: "100%",
-            minHeight: 120,
-            marginTop: 12,
-            marginBottom: 12,
-            padding: 12,
-            borderRadius: 10,
-            border: "1px solid #ddd",
-          }}
-        />
-
-        <div style={{ display: "flex", gap: 12 }}>
-          <button
-            onClick={copyMessage}
+          <textarea
+            value={draftMessage}
+            readOnly
             style={{
-              padding: "10px 14px",
-              borderRadius: 10,
-              border: "1px solid #ddd",
-              background: "white",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
+              width: "100%",
+              minHeight: 120,
+              marginTop: 10,
+              marginBottom: 10,
+              padding: 10,
+              borderRadius: 8,
+              border: "1px solid #ccc"
             }}
-          >
-            <Copy size={16} />
-            Copy Message
-          </button>
+          />
 
-          <button
-            onClick={openWhatsApp}
-            style={{
-              padding: "10px 14px",
-              borderRadius: 10,
-              border: "none",
-              background: "#111827",
-              color: "white",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-            }}
-          >
-            <MessageSquare size={16} />
-            Open in WhatsApp
-          </button>
+          {/* ACTION BUTTONS */}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button onClick={copyMessage}>
+              <Copy size={16} /> Copy Message
+            </button>
+
+            <button onClick={openWhatsApp}>
+              <MessageSquare size={16} /> Open WhatsApp
+            </button>
+
+            <button onClick={nextContact}>
+              <ArrowRight size={16} /> Next Contact
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
