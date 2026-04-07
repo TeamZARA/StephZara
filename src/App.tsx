@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 
 type Status = "New" | "Waiting" | "Interested" | "Appointment" | "Do Not Contact";
 type View = "dashboard" | "contacts" | "leads" | "pipeline" | "scripts" | "bulk" | "manager";
+type CrmTag = "Unmessaged" | "Messaged" | "Responded" | "Hot Seller" | "Follow Up" | "Archived";
 
 type ContactRecord = {
   id: string;
@@ -34,6 +35,10 @@ type ContactRecord = {
   notes: string;
   reply: string;
   followUpDue: boolean;
+  followUpDate: string;
+  suburb: string;
+  crmTag: CrmTag;
+  suburbGroup: string;
 };
 
 type ScriptTemplate = {
@@ -43,9 +48,16 @@ type ScriptTemplate = {
   content: string;
 };
 
-const STORAGE_CONTACTS_KEY = "stephzara_contacts_v3";
-const STORAGE_SCRIPTS_KEY = "stephzara_scripts_v3";
-const STORAGE_CSV_NAME_KEY = "stephzara_csv_name_v3";
+const STORAGE_CONTACTS_KEY = "stephzara_contacts_v4";
+const STORAGE_SCRIPTS_KEY = "stephzara_scripts_v4";
+const STORAGE_CSV_NAME_KEY = "stephzara_csv_name_v4";
+
+const todayIso = () => new Date().toISOString().slice(0, 10);
+const addDaysIso = (days: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+};
 
 const seed: ContactRecord[] = [
   {
@@ -55,7 +67,7 @@ const seed: ContactRecord[] = [
     surname: "Smith",
     email: "janine@example.com",
     cell: "+27 82 555 0141",
-    address: "12 Oak Street",
+    address: "12 Oak Street, Durbanville",
     phone: "021 555 1111",
     type: "Owner",
     idNumber: "7506281234088",
@@ -69,8 +81,8 @@ const seed: ContactRecord[] = [
     whatsApp: "Yes",
     optIn: "Yes",
     agents: "Lerato",
-    loaded: "2026-04-02",
-    modified: "2026-04-02",
+    loaded: todayIso(),
+    modified: todayIso(),
     lastContacted: "",
     status: "New",
     assignee: "Lerato",
@@ -79,6 +91,10 @@ const seed: ContactRecord[] = [
     notes: "Fresh PropCon import",
     reply: "",
     followUpDue: true,
+    followUpDate: todayIso(),
+    suburb: "Durbanville",
+    crmTag: "Unmessaged",
+    suburbGroup: "Durbanville",
   },
   {
     id: "2",
@@ -87,7 +103,7 @@ const seed: ContactRecord[] = [
     surname: "Jacobs",
     email: "peter@example.com",
     cell: "+27 83 555 0198",
-    address: "85 Marine Road",
+    address: "85 Marine Road, Blouberg",
     phone: "021 555 2222",
     type: "Owner",
     idNumber: "7801015678088",
@@ -101,9 +117,9 @@ const seed: ContactRecord[] = [
     whatsApp: "Yes",
     optIn: "Yes",
     agents: "Lerato",
-    loaded: "2026-04-02",
-    modified: "2026-04-03",
-    lastContacted: "2026-04-03",
+    loaded: todayIso(),
+    modified: todayIso(),
+    lastContacted: todayIso(),
     status: "Waiting",
     assignee: "Lerato",
     temperature: "Cold",
@@ -111,17 +127,21 @@ const seed: ContactRecord[] = [
     notes: "Follow-up today",
     reply: "Seen, no reply",
     followUpDue: true,
+    followUpDate: addDaysIso(1),
+    suburb: "Blouberg",
+    crmTag: "Follow Up",
+    suburbGroup: "Blouberg",
   },
   {
     id: "3",
-    category: "Buyer",
+    category: "Seller",
     name: "Ayesha",
     surname: "Daniels",
     email: "ayesha@example.com",
     cell: "+27 81 555 0102",
-    address: "44 Sandpiper Ave",
+    address: "44 Sandpiper Ave, Parklands",
     phone: "021 555 3333",
-    type: "Buyer",
+    type: "Owner",
     idNumber: "8102023456088",
     birthDay: "1981-02-02",
     tags: "Warm",
@@ -133,9 +153,9 @@ const seed: ContactRecord[] = [
     whatsApp: "Yes",
     optIn: "Yes",
     agents: "Lerato",
-    loaded: "2026-04-02",
-    modified: "2026-04-03",
-    lastContacted: "2026-04-03",
+    loaded: todayIso(),
+    modified: todayIso(),
+    lastContacted: todayIso(),
     status: "Interested",
     assignee: "Lerato",
     temperature: "Warm",
@@ -143,14 +163,24 @@ const seed: ContactRecord[] = [
     notes: "Warm lead",
     reply: "Please send recent sales.",
     followUpDue: false,
+    followUpDate: addDaysIso(3),
+    suburb: "Parklands",
+    crmTag: "Responded",
+    suburbGroup: "Parklands",
   },
 ];
 
 const defaultScripts: ScriptTemplate[] = [
-  { id: "s1", name: "Buyer Enquiry", category: "Canvassing", content: "Hi {{full_name}}, quick one — I’m working with a buyer looking in your area. Would you consider selling if the price made sense?" },
-  { id: "s2", name: "Recent Sales", category: "Canvassing", content: "Hi {{full_name}}, I’ve just updated recent sales near your property. Would you like me to send you what properties close by are selling for?" },
-  { id: "s3", name: "Property Value", category: "Valuation", content: "Hi {{full_name}}, have you seen what homes in your area are selling for lately?" },
-  { id: "s4", name: "Appointment Close", category: "Appointment", content: "Thanks {{full_name}}. I can arrange a quick no-obligation valuation for your property. What day would suit you best?" },
+  { id: "s1", name: "Area Sales Intro 1", category: "Canvassing", content: "Hi {{name}}, I’m putting together a free property sales report for homeowners in {{suburb}}. Would you like me to send you what homes around you have sold for over the last year?" },
+  { id: "s2", name: "Area Sales Intro 2", category: "Canvassing", content: "Hi {{name}}, quick one — I’ve just compiled recent property sales in {{suburb}}. Would you be interested in seeing what similar properties nearby have been selling for?" },
+  { id: "s3", name: "Neighbourhood Update", category: "Canvassing", content: "Hi {{name}}, I’m sharing a free sales update with homeowners in {{suburb}}. It shows what similar homes have sold for recently. Would you like me to send you a copy?" },
+  { id: "s4", name: "Curiosity Hook", category: "Canvassing", content: "Hi {{name}}, have you seen what properties in your area have been achieving lately? I’ve got the latest figures for {{suburb}} if you’d like me to send them through." },
+  { id: "s5", name: "Value Awareness", category: "Valuation", content: "Hi {{name}}, property values in {{suburb}} have changed quite a bit over the past year. I’ve put together a simple report showing recent sales — would you like me to send it to you?" },
+  { id: "s6", name: "Soft Seller Approach", category: "Canvassing", content: "Hi {{name}}, I’m currently helping buyers looking in {{suburb}}. I also have a free sales report for the area showing recent transactions — would you like me to share it with you?" },
+  { id: "s7", name: "Professional Offer", category: "Canvassing", content: "Hi {{name}}, I’m working on a professional sales report for homeowners in {{suburb}} showing recent transactions and price trends. Happy to send it free of charge — would that be useful to you?" },
+  { id: "s8", name: "Engagement Question", category: "Canvassing", content: "Hi {{name}}, if you knew exactly what properties in {{suburb}} were selling for today, would that be helpful? I’ve got recent sales data for the area that I can share." },
+  { id: "s9", name: "Local Insight", category: "Canvassing", content: "Hi {{name}}, I’ve just updated my records with the latest property sales in {{suburb}}. Would you like a quick breakdown of what’s been happening in your area?" },
+  { id: "s10", name: "Friendly Intro", category: "Canvassing", content: "Hi {{name}}, I’m reaching out to a few homeowners in {{suburb}} with a free report on recent property sales. No obligation at all — would you like me to send it through?" },
 ];
 
 const csvFieldDefs = [
@@ -192,16 +222,12 @@ function fullName(record: ContactRecord) {
   return `${record.name} ${record.surname}`.trim();
 }
 
-function initials(record: ContactRecord) {
-  return `${record.name?.[0] || ""}${record.surname?.[0] || ""}`.toUpperCase();
-}
-
 function renderScript(content: string, record: ContactRecord) {
   return content
     .replace(/\{\{full_name\}\}/g, fullName(record))
     .replace(/\{\{name\}\}/g, record.name)
     .replace(/\{\{surname\}\}/g, record.surname)
-    .replace(/\{\{suburb\}\}/g, record.address)
+    .replace(/\{\{suburb\}\}/g, record.suburb || record.address)
     .replace(/\{\{cell\}\}/g, record.cell)
     .replace(/\{\{email\}\}/g, record.email)
     .replace(/\{\{address\}\}/g, record.address)
@@ -275,10 +301,21 @@ function buildWhatsAppUrl(phoneRaw: string, message: string) {
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 }
 
+function metricBg(index: number) {
+  const bgs = [
+    "linear-gradient(135deg,#f8fafc,#e2e8f0)",
+    "linear-gradient(135deg,#fef3c7,#fde68a)",
+    "linear-gradient(135deg,#dcfce7,#a7f3d0)",
+    "linear-gradient(135deg,#dbeafe,#93c5fd)",
+    "linear-gradient(135deg,#ffe4e6,#fdba74)",
+  ];
+  return bgs[index % bgs.length];
+}
+
 export default function App() {
   const [view, setView] = useState<View>("dashboard");
   const [records, setRecords] = useState<ContactRecord[]>(() => {
-    const stored = localStorage.getItem(STORAGE_CONTACTS_KEY);
+    const stored = typeof window !== "undefined" ? localStorage.getItem(STORAGE_CONTACTS_KEY) : null;
     if (!stored) return seed;
     try {
       return JSON.parse(stored) as ContactRecord[];
@@ -289,9 +326,9 @@ export default function App() {
   const [selectedId, setSelectedId] = useState("3");
   const [selectedScriptId, setSelectedScriptId] = useState("s3");
   const [selectedBulk, setSelectedBulk] = useState<Record<string, boolean>>({});
-  const [csvName, setCsvName] = useState(() => localStorage.getItem(STORAGE_CSV_NAME_KEY) || "No file selected");
+  const [csvName, setCsvName] = useState(() => (typeof window !== "undefined" ? localStorage.getItem(STORAGE_CSV_NAME_KEY) || "No file selected" : "No file selected"));
   const [scripts, setScripts] = useState<ScriptTemplate[]>(() => {
-    const stored = localStorage.getItem(STORAGE_SCRIPTS_KEY);
+    const stored = typeof window !== "undefined" ? localStorage.getItem(STORAGE_SCRIPTS_KEY) : null;
     if (!stored) return defaultScripts;
     try {
       return JSON.parse(stored) as ScriptTemplate[];
@@ -303,28 +340,26 @@ export default function App() {
   const [scriptCategory, setScriptCategory] = useState("Canvassing");
   const [scriptContent, setScriptContent] = useState("");
   const [quickSearch, setQuickSearch] = useState("");
-  const [fieldSearch, setFieldSearch] = useState<Record<string, string>>(() => {
-    const obj: Record<string, string> = {};
-    csvFieldDefs.forEach((f) => {
-      obj[f.key] = "";
-    });
-    return obj;
-  });
+  const [fieldSearch, setFieldSearch] = useState<Record<string, string>>(() => Object.fromEntries(csvFieldDefs.map((f) => [f.key, ""])));
+  const [selectedSuburbGroup, setSelectedSuburbGroup] = useState("All suburbs");
+  const [selectedCrmTag, setSelectedCrmTag] = useState<CrmTag | "All tags">("All tags");
   const [bulkQueueIndex, setBulkQueueIndex] = useState(0);
   const [bulkDrafts, setBulkDrafts] = useState<Record<string, { scriptId: string; message: string }>>({});
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_CONTACTS_KEY, JSON.stringify(records));
+    if (typeof window !== "undefined") localStorage.setItem(STORAGE_CONTACTS_KEY, JSON.stringify(records));
   }, [records]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_SCRIPTS_KEY, JSON.stringify(scripts));
+    if (typeof window !== "undefined") localStorage.setItem(STORAGE_SCRIPTS_KEY, JSON.stringify(scripts));
   }, [scripts]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_CSV_NAME_KEY, csvName);
+    if (typeof window !== "undefined") localStorage.setItem(STORAGE_CSV_NAME_KEY, csvName);
   }, [csvName]);
+
+  const suburbGroups = useMemo(() => ["All suburbs", ...Array.from(new Set(records.map((r) => r.suburb || "Unknown"))).sort()], [records]);
 
   const filtered = useMemo(() => {
     return records.filter((record) => {
@@ -351,6 +386,8 @@ export default function App() {
         record.loaded,
         record.modified,
         record.lastContacted,
+        record.suburb,
+        record.crmTag,
       ].join(" ").toLowerCase();
       const quickMatch = quickHay.includes(quickSearch.toLowerCase());
       const fieldMatch = csvFieldDefs.every((field) => {
@@ -358,13 +395,15 @@ export default function App() {
         if (!value) return true;
         return String((record as any)[field.key] || "").toLowerCase().includes(value.toLowerCase());
       });
-      return quickMatch && fieldMatch;
+      const suburbMatch = selectedSuburbGroup === "All suburbs" ? true : record.suburb === selectedSuburbGroup;
+      const crmTagMatch = selectedCrmTag === "All tags" ? true : record.crmTag === selectedCrmTag;
+      return quickMatch && fieldMatch && suburbMatch && crmTagMatch;
     });
-  }, [records, quickSearch, fieldSearch]);
+  }, [records, quickSearch, fieldSearch, selectedSuburbGroup, selectedCrmTag]);
 
   const selected = filtered.find((r) => r.id === selectedId) || records.find((r) => r.id === selectedId) || records[0];
   const selectedScript = scripts.find((s) => s.id === selectedScriptId) || scripts[0];
-  const message = renderScript(selectedScript.content, selected);
+  const leadMessage = renderScript(selectedScript.content, selected);
 
   const bulkTargets = filtered.filter((r) => selectedBulk[r.id]);
   const bulkTarget = bulkTargets[bulkQueueIndex] || null;
@@ -373,17 +412,18 @@ export default function App() {
     if (!bulkTargets.length) return;
     setBulkDrafts((prev) => {
       const next = { ...prev };
-      bulkTargets.forEach((record) => {
+      bulkTargets.forEach((record, index) => {
         if (!next[record.id]) {
+          const rotatedScript = scripts[index % scripts.length] || selectedScript;
           next[record.id] = {
-            scriptId: selectedScriptId,
-            message: renderScript(selectedScript.content, record),
+            scriptId: rotatedScript.id,
+            message: renderScript(rotatedScript.content, record),
           };
         }
       });
       return next;
     });
-  }, [bulkTargets, selectedScriptId, selectedScript, filtered]);
+  }, [bulkTargets, scripts, selectedScript]);
 
   const stats = {
     total: records.length,
@@ -391,20 +431,51 @@ export default function App() {
     hot: records.filter((r) => r.temperature === "Hot").length,
     interested: records.filter((r) => r.status === "Interested").length,
     appointments: records.filter((r) => r.status === "Appointment").length,
+    messaged: records.filter((r) => r.crmTag === "Messaged").length,
+    responded: records.filter((r) => r.crmTag === "Responded").length,
   };
 
-  const copyMessage = async () => {
+  const pipeline = ["New", "Waiting", "Interested", "Appointment", "Do Not Contact"].map((status) => ({
+    status: status as Status,
+    items: records.filter((r) => r.status === status),
+  }));
+
+  const copyLeadMessage = async () => {
     try {
-      await navigator.clipboard.writeText(message);
+      await navigator.clipboard.writeText(leadMessage);
       alert("Message copied");
     } catch {
       alert("Could not copy message");
     }
   };
 
-  const openWhatsApp = () => {
-    const phoneSource = selected.cell || selected.phone;
-    window.open(buildWhatsAppUrl(phoneSource, message), "_blank");
+  const openLeadWhatsApp = () => {
+    window.open(buildWhatsAppUrl(selected.cell || selected.phone, leadMessage), "_blank");
+  };
+
+  const markLeadStatus = (status: Status) => {
+    setRecords((prev) =>
+      prev.map((r) =>
+        r.id === selected.id
+          ? {
+              ...r,
+              status,
+              followUpDue: status === "Waiting",
+              temperature: status === "Appointment" ? "Hot" : status === "Interested" ? "Warm" : r.temperature,
+              modified: todayIso(),
+            }
+          : r
+      )
+    );
+  };
+
+  const tagLead = (crmTag: CrmTag) => {
+    setRecords((prev) => prev.map((r) => (r.id === selected.id ? { ...r, crmTag, modified: todayIso() } : r)));
+  };
+
+  const nextLead = () => {
+    const idx = filtered.findIndex((r) => r.id === selected.id);
+    if (idx >= 0 && idx < filtered.length - 1) setSelectedId(filtered[idx + 1].id);
   };
 
   const exportRegister = () => {
@@ -433,6 +504,9 @@ export default function App() {
         Loaded: r.loaded,
         Modified: r.modified,
         "Last Contacted": r.lastContacted,
+        Suburb: r.suburb,
+        CRMTag: r.crmTag,
+        FollowUpDate: r.followUpDate,
       }))
     );
   };
@@ -442,10 +516,7 @@ export default function App() {
       Category: r.category,
       Name: r.name,
       Surname: r.surname,
-      Email: r.email,
       Cell: r.cell,
-      Address: r.address,
-      Phone: r.phone,
       Script: scripts.find((s) => s.id === (bulkDrafts[r.id]?.scriptId || selectedScriptId))?.name || "",
       Message: bulkDrafts[r.id]?.message || renderScript(selectedScript.content, r),
     }));
@@ -484,21 +555,31 @@ export default function App() {
 
   const markBulkSentAndNext = () => {
     if (!bulkTarget) return;
-    setRecords((prev) => prev.map((r) => (r.id === bulkTarget.id ? { ...r, followUpDue: false, lastContacted: new Date().toISOString().slice(0, 10) } : r)));
-    if (bulkQueueIndex < bulkTargets.length - 1) {
-      setBulkQueueIndex((prev) => prev + 1);
-    } else {
-      alert("Bulk queue complete");
-    }
+    setRecords((prev) => prev.map((r) => (r.id === bulkTarget.id ? { ...r, crmTag: "Messaged", followUpDue: true, followUpDate: addDaysIso(3), lastContacted: todayIso(), modified: todayIso() } : r)));
+    if (bulkQueueIndex < bulkTargets.length - 1) setBulkQueueIndex((prev) => prev + 1);
+    else alert("Bulk queue complete");
+  };
+
+  const markBulkResponded = () => {
+    if (!bulkTarget) return;
+    setRecords((prev) => prev.map((r) => (r.id === bulkTarget.id ? { ...r, crmTag: "Responded", status: "Interested", temperature: "Warm", modified: todayIso() } : r)));
+  };
+
+  const markBulkHotSeller = () => {
+    if (!bulkTarget) return;
+    setRecords((prev) => prev.map((r) => (r.id === bulkTarget.id ? { ...r, crmTag: "Hot Seller", status: "Appointment", temperature: "Hot", modified: todayIso() } : r)));
+  };
+
+  const scheduleBulkFollowUp = () => {
+    if (!bulkTarget) return;
+    setRecords((prev) => prev.map((r) => (r.id === bulkTarget.id ? { ...r, crmTag: "Follow Up", followUpDue: true, followUpDate: addDaysIso(2), modified: todayIso() } : r)));
+    alert("Follow-up reminder set");
   };
 
   const skipBulkAndNext = () => {
     if (!bulkTarget) return;
-    if (bulkQueueIndex < bulkTargets.length - 1) {
-      setBulkQueueIndex((prev) => prev + 1);
-    } else {
-      alert("No more contacts in queue");
-    }
+    if (bulkQueueIndex < bulkTargets.length - 1) setBulkQueueIndex((prev) => prev + 1);
+    else alert("No more contacts in queue");
   };
 
   const prevBulk = () => {
@@ -515,20 +596,22 @@ export default function App() {
     if (!record || !script) return;
     setBulkDrafts((prev) => ({
       ...prev,
-      [recordId]: {
-        scriptId,
-        message: renderScript(script.content, record),
-      },
+      [recordId]: { scriptId, message: renderScript(script.content, record) },
     }));
+  };
+
+  const rotateCurrentScript = () => {
+    if (!bulkTarget) return;
+    const currentId = bulkDrafts[bulkTarget.id]?.scriptId || selectedScriptId;
+    const currentIndex = scripts.findIndex((s) => s.id === currentId);
+    const nextScript = scripts[(currentIndex + 1) % scripts.length];
+    updateBulkDraftScript(bulkTarget.id, nextScript.id);
   };
 
   const updateBulkDraftMessage = (recordId: string, messageText: string) => {
     setBulkDrafts((prev) => ({
       ...prev,
-      [recordId]: {
-        scriptId: prev[recordId]?.scriptId || selectedScriptId,
-        message: messageText,
-      },
+      [recordId]: { scriptId: prev[recordId]?.scriptId || selectedScriptId, message: messageText },
     }));
   };
 
@@ -563,7 +646,7 @@ export default function App() {
       idNumber: getByNames(row, ["idnumber"]),
       birthDay: getByNames(row, ["birthday"]),
       tags: getByNames(row, ["tags"]),
-      source: getByNames(row, ["source"]),
+      source: getByNames(row, ["source"]) || file.name,
       wishLists: getByNames(row, ["wishlists"]),
       matches: getByNames(row, ["matches"]),
       sms: getByNames(row, ["sms"]),
@@ -571,8 +654,8 @@ export default function App() {
       whatsApp: getByNames(row, ["whatsapp"]),
       optIn: getByNames(row, ["optin"]),
       agents: getByNames(row, ["agents"]),
-      loaded: getByNames(row, ["loaded"]),
-      modified: getByNames(row, ["modified"]),
+      loaded: getByNames(row, ["loaded"]) || todayIso(),
+      modified: getByNames(row, ["modified"]) || todayIso(),
       lastContacted: getByNames(row, ["lastcontacted"]),
       status: "New",
       assignee: getByNames(row, ["agents"]) || "Unassigned",
@@ -581,6 +664,10 @@ export default function App() {
       notes: "Imported from CSV",
       reply: "",
       followUpDue: true,
+      followUpDate: todayIso(),
+      suburb: getByNames(row, ["suburb"]) || getByNames(row, ["address"]),
+      crmTag: "Unmessaged",
+      suburbGroup: getByNames(row, ["suburb"]) || getByNames(row, ["address"]),
     })).filter((r) => r.name || r.surname || r.cell || r.email);
 
     if (!imported.length) {
@@ -612,14 +699,15 @@ export default function App() {
     const waiting = records.filter((r) => r.followUpDue && r.status !== "Do Not Contact");
     if (waiting.length) {
       setSelectedId(waiting[0].id);
-      setView("leads");
+      setView("contacts");
+      setSelectedCrmTag("Follow Up");
     } else {
       alert("No follow-ups due right now");
     }
   };
 
   return (
-    <div style={styles.page}>
+    <div className="min-h-screen bg-slate-50 text-slate-900">
       <input ref={fileRef} type="file" accept=".csv,text/csv" style={{ display: "none" }} onChange={(e) => void handleCsvFile(e.target.files?.[0] || null)} />
       <div style={styles.layout}>
         <aside style={styles.sidebar}>
@@ -643,8 +731,8 @@ export default function App() {
             <div style={styles.focusCardDark}>
               <div style={styles.focusTitle}>🔥 Focus Today</div>
               <div style={styles.darkRow}><span>Follow-ups</span><strong>{stats.due}</strong></div>
-              <div style={styles.darkRow}><span>Hot leads</span><strong>{stats.hot}</strong></div>
-              <div style={styles.darkRow}><span>Booked</span><strong>{stats.appointments}</strong></div>
+              <div style={styles.darkRow}><span>Messaged</span><strong>{stats.messaged}</strong></div>
+              <div style={styles.darkRow}><span>Responded</span><strong>{stats.responded}</strong></div>
               <button onClick={openFollowUps} style={{ ...styles.whiteButton, width: "100%", marginTop: 8 }}>Open Follow Ups</button>
             </div>
           </div>
@@ -654,9 +742,9 @@ export default function App() {
           <section style={styles.hero}>
             <div style={styles.heroTop}>
               <div>
-                <div style={styles.heroTag}>✨ One-by-one PropCon-style bulk WhatsApp queue</div>
+                <div style={styles.heroTag}>✨ Next-level CRM upgrade</div>
                 <h1 style={styles.heroTitle}>Lead Management Dashboard</h1>
-                <p style={styles.heroText}>Select contacts, open a bulk queue, edit each message, choose a script for each person, and send one by one through WhatsApp desktop or app.</p>
+                <p style={styles.heroText}>Now with smart script rotation, CRM tags, suburb grouping, response tracking, follow-up reminders, and a one-by-one editable WhatsApp queue.</p>
               </div>
               <div style={styles.heroButtons}>
                 <button onClick={handleImportClick} style={styles.whiteButton}>📤 Import CSV</button>
@@ -664,39 +752,80 @@ export default function App() {
               </div>
             </div>
             <div style={styles.metricsGrid}>
-              <MetricCard title="Contacts" value={stats.total} bg="linear-gradient(135deg,#f8fafc,#e2e8f0)" />
-              <MetricCard title="Warm / Hot" value={stats.hot + records.filter((r) => r.temperature === "Warm").length} bg="linear-gradient(135deg,#fef3c7,#fde68a)" />
-              <MetricCard title="Interested" value={stats.interested} bg="linear-gradient(135deg,#dcfce7,#a7f3d0)" />
-              <MetricCard title="Appointments" value={stats.appointments} bg="linear-gradient(135deg,#dbeafe,#93c5fd)" />
-              <MetricCard title="Due Today" value={stats.due} bg="linear-gradient(135deg,#ffe4e6,#fdba74)" />
+              {[
+                ["Contacts", stats.total],
+                ["Warm / Hot", stats.hot + records.filter((r) => r.temperature === "Warm").length],
+                ["Interested", stats.interested],
+                ["Appointments", stats.appointments],
+                ["Due Today", stats.due],
+              ].map(([label, value], i) => <MetricCard key={String(label)} title={String(label)} value={Number(value)} bg={metricBg(i)} />)}
             </div>
           </section>
+
+          {view === "dashboard" && (
+            <div style={styles.twoCol}>
+              <section style={styles.card}>
+                <div style={styles.cardHeader}><div><h2 style={styles.cardTitle}>Smart Overview</h2><div style={styles.cardSub}>Track outreach, responses, and follow-ups.</div></div></div>
+                <div style={styles.focusGrid}>
+                  <FocusCard title="Messaged" value={`${stats.messaged}`} subtitle="Contacts already reached" gradient="linear-gradient(135deg,#2563eb,#06b6d4)" />
+                  <FocusCard title="Responded" value={`${stats.responded}`} subtitle="People who replied" gradient="linear-gradient(135deg,#16a34a,#34d399)" />
+                  <FocusCard title="Follow Ups" value={`${stats.due}`} subtitle="Needs another touch" gradient="linear-gradient(135deg,#f59e0b,#f97316)" />
+                  <FocusCard title="Hot Sellers" value={`${records.filter((r) => r.crmTag === "Hot Seller").length}`} subtitle="High-priority owners" gradient="linear-gradient(135deg,#ef4444,#fb7185)" />
+                </div>
+              </section>
+              <section style={styles.card}>
+                <div style={styles.cardHeader}><div><h2 style={styles.cardTitle}>Suburb Breakdown</h2><div style={styles.cardSub}>Use grouping to work one suburb at a time.</div></div></div>
+                <div style={styles.previewStack}>
+                  {suburbGroups.filter((s) => s !== "All suburbs").map((suburb) => {
+                    const group = records.filter((r) => r.suburb === suburb);
+                    return (
+                      <button key={suburb} onClick={() => { setSelectedSuburbGroup(suburb); setView("contacts"); }} style={styles.previewCard}>
+                        <div style={styles.previewHead}><div style={styles.previewName}>{suburb}</div><span style={styles.tag}>{group.length} contacts</span></div>
+                        <div style={styles.previewMessage}>{group.filter((r) => r.crmTag === "Responded").length} responded · {group.filter((r) => r.followUpDue).length} follow up</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            </div>
+          )}
 
           {view === "contacts" && (
             <div style={styles.card}>
               <div style={styles.cardHeader}>
                 <div>
                   <h2 style={styles.cardTitle}>Contacts</h2>
-                  <div style={styles.cardSub}>Choose the contacts you want in the queue, then open Bulk Send.</div>
+                  <div style={styles.cardSub}>Search all imported fields, group by suburb, and build your send queue.</div>
                 </div>
                 <div style={styles.topBadge}>{filtered.length} results • {csvName}</div>
               </div>
+
+              <div style={styles.contactsActionsRow}>
+                <select value={selectedSuburbGroup} onChange={(e) => setSelectedSuburbGroup(e.target.value)} style={styles.select}>
+                  {suburbGroups.map((s) => <option key={s}>{s}</option>)}
+                </select>
+                <select value={selectedCrmTag} onChange={(e) => setSelectedCrmTag(e.target.value as any)} style={styles.select}>
+                  {["All tags", "Unmessaged", "Messaged", "Responded", "Hot Seller", "Follow Up", "Archived"].map((t) => <option key={t}>{t}</option>)}
+                </select>
+                <button onClick={() => { const next: Record<string, boolean> = {}; filtered.forEach((r) => { next[r.id] = true; }); setSelectedBulk(next); setBulkQueueIndex(0); }} style={styles.secondaryAction}>Select All Results</button>
+                <button onClick={() => { setSelectedBulk({}); setBulkQueueIndex(0); }} style={styles.secondaryAction}>Clear Selection</button>
+                <button onClick={openBulkSend} style={styles.darkButton}>Open Bulk Send</button>
+              </div>
+
               <div style={styles.contactsSearchGridUltraWide}>
                 <SearchField label="Quick Search" value={quickSearch} onChange={setQuickSearch} placeholder="Search all fields" />
                 {csvFieldDefs.map((field) => (
                   <SearchField key={field.key} label={field.label} value={fieldSearch[field.key] || ""} onChange={(value) => setFieldSearch((prev) => ({ ...prev, [field.key]: value }))} placeholder={field.label} />
                 ))}
               </div>
-              <div style={styles.contactsActionsRow}>
-                <button onClick={() => { const next: Record<string, boolean> = {}; filtered.forEach((r) => { next[r.id] = true; }); setSelectedBulk(next); setBulkQueueIndex(0); }} style={styles.secondaryAction}>Select All Results</button>
-                <button onClick={() => { setSelectedBulk({}); setBulkQueueIndex(0); }} style={styles.secondaryAction}>Clear Selection</button>
-                <button onClick={openBulkSend} style={styles.darkButton}>Open Bulk Send</button>
-              </div>
+
               <div style={styles.tableWrap}>
                 <table style={styles.table}>
                   <thead>
                     <tr>
                       <th style={styles.th}></th>
+                      <th style={styles.th}>CRM Tag</th>
+                      <th style={styles.th}>Suburb</th>
                       {csvFieldDefs.map((field) => <th key={field.key} style={styles.th}>{field.label}</th>)}
                     </tr>
                   </thead>
@@ -704,6 +833,8 @@ export default function App() {
                     {filtered.map((record) => (
                       <tr key={record.id}>
                         <td style={styles.td}><input type="checkbox" checked={!!selectedBulk[record.id]} onChange={() => setSelectedBulk((prev) => ({ ...prev, [record.id]: !prev[record.id] }))} /></td>
+                        <td style={styles.td}>{record.crmTag}</td>
+                        <td style={styles.td}>{record.suburb}</td>
                         {csvFieldDefs.map((field) => <td key={field.key} style={styles.td}>{String((record as any)[field.key] || "")}</td>)}
                       </tr>
                     ))}
@@ -716,7 +847,7 @@ export default function App() {
           {view === "scripts" && (
             <div style={styles.twoCol}>
               <section style={styles.card}>
-                <div style={styles.cardHeader}><div><h2 style={styles.cardTitle}>Saved Scripts</h2><div style={styles.cardSub}>Reusable WhatsApp templates like PropCon.</div></div><div style={styles.topBadge}>{scripts.length} scripts</div></div>
+                <div style={styles.cardHeader}><div><h2 style={styles.cardTitle}>Saved Scripts</h2><div style={styles.cardSub}>Rotate scripts naturally across your queue.</div></div><div style={styles.topBadge}>{scripts.length} scripts</div></div>
                 <div style={styles.listArea}>
                   {scripts.map((item) => (
                     <button key={item.id} onClick={() => setSelectedScriptId(item.id)} style={{ ...styles.scriptCard, ...(selectedScriptId === item.id ? styles.leadCardActive : {}) }}>
@@ -727,10 +858,10 @@ export default function App() {
                 </div>
               </section>
               <section style={styles.card}>
-                <div style={styles.cardHeader}><div><h2 style={styles.cardTitle}>Create Script</h2><div style={styles.cardSub}>Save templates with placeholders like {{full_name}}, {{name}}, {{surname}}, {{email}}, {{cell}}, {{address}}, {{type}}.</div></div></div>
+                <div style={styles.cardHeader}><div><h2 style={styles.cardTitle}>Create Script</h2><div style={styles.cardSub}>Add your own first-contact or follow-up messages.</div></div></div>
                 <div>
                   <label style={styles.label}>Script Name</label>
-                  <input value={scriptName} onChange={(e) => setScriptName(e.target.value)} style={styles.input} placeholder="Example: Wish List Match" />
+                  <input value={scriptName} onChange={(e) => setScriptName(e.target.value)} style={styles.input} placeholder="Example: Free Sales Report Intro" />
                 </div>
                 <div style={{ marginTop: 16 }}>
                   <label style={styles.label}>Category</label>
@@ -738,12 +869,12 @@ export default function App() {
                 </div>
                 <div style={{ marginTop: 16 }}>
                   <label style={styles.label}>Content</label>
-                  <textarea value={scriptContent} onChange={(e) => setScriptContent(e.target.value)} style={styles.textarea} placeholder="Hi {{full_name}}, your wish list match in {{address}} is now available..." />
+                  <textarea value={scriptContent} onChange={(e) => setScriptContent(e.target.value)} style={styles.textarea} placeholder="Hi {{name}}, I’ve put together a free property sales report for {{suburb}}..." />
                 </div>
                 <div style={styles.actionRow3}>
                   <button onClick={saveScript} style={styles.darkButtonWide}>💾 Save Script</button>
                   <button onClick={() => { setScriptName(""); setScriptCategory("Canvassing"); setScriptContent(""); }} style={styles.secondaryAction}>Clear</button>
-                  <button onClick={() => setView("contacts")} style={styles.secondaryAction}>Use in Contacts</button>
+                  <button onClick={() => setView("bulk")} style={styles.secondaryAction}>Use in Queue</button>
                 </div>
               </section>
             </div>
@@ -755,7 +886,7 @@ export default function App() {
                 <div style={styles.cardHeader}>
                   <div>
                     <h2 style={styles.cardTitle}>Bulk WhatsApp Queue</h2>
-                    <div style={styles.cardSub}>Review one selected contact at a time, edit the message, then open WhatsApp manually.</div>
+                    <div style={styles.cardSub}>Choose a contact yourself, pick a script, edit the message, send in WhatsApp, then move on.</div>
                   </div>
                   <button onClick={exportBulk} style={styles.darkButton}>📥 Export CSV</button>
                 </div>
@@ -763,10 +894,9 @@ export default function App() {
                 <div style={styles.bulkActionBar}>
                   <button onClick={prevBulk} style={styles.secondaryAction}>Previous</button>
                   <button onClick={nextBulk} style={styles.secondaryAction}>Next</button>
+                  <button onClick={rotateCurrentScript} style={styles.secondaryAction}>Rotate Script</button>
                   <button onClick={openCurrentBulkWhatsApp} style={styles.whatsAppAction}>Open in WhatsApp</button>
                   <button onClick={copyCurrentBulkMessage} style={styles.secondaryAction}>Copy Message</button>
-                  <button onClick={markBulkSentAndNext} style={styles.darkButton}>Mark Sent + Next</button>
-                  <button onClick={skipBulkAndNext} style={styles.secondaryAction}>Skip</button>
                 </div>
 
                 <div style={styles.bulkInfoBox}>
@@ -779,26 +909,25 @@ export default function App() {
                       <div style={styles.bulkQueueMetaGrid}>
                         <div style={styles.infoTile}><div style={styles.infoLabel}>Cell</div><div style={styles.infoValue}>{bulkTarget.cell || bulkTarget.phone}</div></div>
                         <div style={styles.infoTile}><div style={styles.infoLabel}>Agent</div><div style={styles.infoValue}>{bulkTarget.agents || bulkTarget.assignee}</div></div>
-                        <div style={styles.infoTile}><div style={styles.infoLabel}>Category</div><div style={styles.infoValue}>{bulkTarget.category}</div></div>
-                        <div style={styles.infoTile}><div style={styles.infoLabel}>Address</div><div style={styles.infoValue}>{bulkTarget.address}</div></div>
+                        <div style={styles.infoTile}><div style={styles.infoLabel}>Suburb</div><div style={styles.infoValue}>{bulkTarget.suburb}</div></div>
+                        <div style={styles.infoTile}><div style={styles.infoLabel}>CRM Tag</div><div style={styles.infoValue}>{bulkTarget.crmTag}</div></div>
                       </div>
                       <div style={{ marginTop: 16 }}>
                         <label style={styles.label}>Script for this contact</label>
-                        <select
-                          value={bulkDrafts[bulkTarget.id]?.scriptId || selectedScriptId}
-                          onChange={(e) => updateBulkDraftScript(bulkTarget.id, e.target.value)}
-                          style={styles.select}
-                        >
+                        <select value={bulkDrafts[bulkTarget.id]?.scriptId || selectedScriptId} onChange={(e) => updateBulkDraftScript(bulkTarget.id, e.target.value)} style={styles.select}>
                           {scripts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
                       </div>
                       <div style={{ marginTop: 16 }}>
                         <label style={styles.label}>Edit message before opening WhatsApp</label>
-                        <textarea
-                          value={bulkDrafts[bulkTarget.id]?.message || ""}
-                          onChange={(e) => updateBulkDraftMessage(bulkTarget.id, e.target.value)}
-                          style={styles.textarea}
-                        />
+                        <textarea value={bulkDrafts[bulkTarget.id]?.message || ""} onChange={(e) => updateBulkDraftMessage(bulkTarget.id, e.target.value)} style={styles.textarea} />
+                      </div>
+                      <div style={styles.bulkActionBar}>
+                        <button onClick={markBulkSentAndNext} style={styles.darkButton}>Mark Sent + Next</button>
+                        <button onClick={markBulkResponded} style={styles.secondaryAction}>Mark Responded</button>
+                        <button onClick={markBulkHotSeller} style={styles.secondaryAction}>Mark Hot Seller</button>
+                        <button onClick={scheduleBulkFollowUp} style={styles.secondaryAction}>Set Follow Up</button>
+                        <button onClick={skipBulkAndNext} style={styles.secondaryAction}>Skip</button>
                       </div>
                     </>
                   ) : (
@@ -808,16 +937,12 @@ export default function App() {
               </section>
 
               <section style={styles.card}>
-                <div style={styles.cardHeader}><div><h2 style={styles.cardTitle}>Selected Queue</h2><div style={styles.cardSub}>All selected contacts appear here. Click any one to jump straight to it.</div></div><div style={styles.topBadge}>{bulkTargets.length} selected</div></div>
+                <div style={styles.cardHeader}><div><h2 style={styles.cardTitle}>Selected Queue</h2><div style={styles.cardSub}>Click any contact to choose it yourself in the queue.</div></div><div style={styles.topBadge}>{bulkTargets.length} selected</div></div>
                 <div style={styles.previewStack}>
                   {bulkTargets.length ? bulkTargets.map((record, index) => (
-                    <button
-                      key={record.id}
-                      onClick={() => setBulkQueueIndex(index)}
-                      style={{ ...styles.previewCard, ...(bulkQueueIndex === index ? styles.leadCardActive : {}) }}
-                    >
+                    <button key={record.id} onClick={() => setBulkQueueIndex(index)} style={{ ...styles.previewCard, ...(bulkQueueIndex === index ? styles.leadCardActive : {}) }}>
                       <div style={styles.previewHead}><div style={styles.previewName}>{index + 1}. {fullName(record)}</div><span style={styles.tag}>{scripts.find((s) => s.id === (bulkDrafts[record.id]?.scriptId || selectedScriptId))?.name || "Script"}</span></div>
-                      <div style={{ ...styles.previewMessage, marginBottom: 8 }}>{record.cell || record.phone}</div>
+                      <div style={{ ...styles.previewMessage, marginBottom: 8 }}>{record.cell || record.phone} · {record.crmTag}</div>
                       <div style={styles.previewMessage}>{bulkDrafts[record.id]?.message || renderScript(selectedScript.content, record)}</div>
                     </button>
                   )) : <div style={styles.emptyBox}>Select contacts to build your send queue.</div>}
@@ -826,100 +951,79 @@ export default function App() {
             </div>
           )}
 
-          {view === "dashboard" && <div style={styles.emptyBox}>Dashboard remains available. Use Contacts to select people and Bulk Send for the one-by-one WhatsApp queue.</div>}
-          {view === "leads" && <div style={styles.emptyBox}>Lead Desk remains available in the repo version. This update focused on the safer PropCon-style one-by-one bulk WhatsApp workflow you asked for.</div>}
-          {view === "pipeline" && <div style={styles.emptyBox}>Pipeline remains available in the repo version. This update focused on the safer PropCon-style one-by-one bulk WhatsApp workflow you asked for.</div>}
-          {view === "manager" && <div style={styles.emptyBox}>Manager view remains available in the repo version. This update focused on the safer PropCon-style one-by-one bulk WhatsApp workflow you asked for.</div>}
+          {view === "leads" && (
+            <div style={styles.card}>
+              <div style={styles.cardHeader}><div><h2 style={styles.cardTitle}>Lead Desk</h2><div style={styles.cardSub}>Quick one-by-one workbench for a single contact.</div></div></div>
+              <div style={styles.bulkQueueMetaGrid}>
+                <div style={styles.infoTile}><div style={styles.infoLabel}>Contact</div><div style={styles.infoValue}>{fullName(selected)}</div></div>
+                <div style={styles.infoTile}><div style={styles.infoLabel}>Cell</div><div style={styles.infoValue}>{selected.cell}</div></div>
+                <div style={styles.infoTile}><div style={styles.infoLabel}>Suburb</div><div style={styles.infoValue}>{selected.suburb}</div></div>
+                <div style={styles.infoTile}><div style={styles.infoLabel}>CRM Tag</div><div style={styles.infoValue}>{selected.crmTag}</div></div>
+              </div>
+              <div style={{ marginTop: 16 }}>
+                <label style={styles.label}>Script</label>
+                <select value={selectedScriptId} onChange={(e) => setSelectedScriptId(e.target.value)} style={styles.select}>
+                  {scripts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+              <div style={{ marginTop: 16 }}>
+                <label style={styles.label}>Message</label>
+                <textarea value={leadMessage} readOnly style={styles.textarea} />
+              </div>
+              <div style={styles.bulkActionBar}>
+                <button onClick={copyLeadMessage} style={styles.secondaryAction}>Copy Message</button>
+                <button onClick={openLeadWhatsApp} style={styles.whatsAppAction}>Open in WhatsApp</button>
+                <button onClick={() => tagLead("Messaged")} style={styles.secondaryAction}>Tag Messaged</button>
+                <button onClick={() => tagLead("Responded")} style={styles.secondaryAction}>Tag Responded</button>
+                <button onClick={() => tagLead("Hot Seller")} style={styles.secondaryAction}>Tag Hot Seller</button>
+                <button onClick={nextLead} style={styles.darkButton}>Next Lead</button>
+              </div>
+              <div style={styles.bulkActionBar}>
+                <button onClick={() => markLeadStatus("Waiting")} style={styles.secondaryAction}>Waiting</button>
+                <button onClick={() => markLeadStatus("Interested")} style={styles.secondaryAction}>Interested</button>
+                <button onClick={() => markLeadStatus("Appointment")} style={styles.secondaryAction}>Appointment</button>
+                <button onClick={() => markLeadStatus("Do Not Contact")} style={styles.secondaryAction}>Do Not Contact</button>
+              </div>
+            </div>
+          )}
+
+          {view === "pipeline" && (
+            <div style={styles.previewStack}>
+              {pipeline.map((group) => (
+                <div key={group.status} style={styles.previewCard}>
+                  <div style={styles.previewHead}><div style={styles.previewName}>{group.status}</div><span style={styles.tag}>{group.items.length}</span></div>
+                  <div style={styles.previewMessage}>{group.items.map((r) => fullName(r)).join(", ") || "No contacts"}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {view === "manager" && (
+            <div style={styles.twoCol}>
+              <section style={styles.card}>
+                <div style={styles.cardHeader}><div><h2 style={styles.cardTitle}>Response Dashboard</h2><div style={styles.cardSub}>Track tag movement across the pipeline.</div></div></div>
+                <div style={styles.previewStack}>
+                  {(["Unmessaged", "Messaged", "Responded", "Hot Seller", "Follow Up", "Archived"] as CrmTag[]).map((tag, idx) => {
+                    const count = records.filter((r) => r.crmTag === tag).length;
+                    return <MetricCard key={tag} title={tag} value={count} bg={metricBg(idx)} />;
+                  })}
+                </div>
+              </section>
+              <section style={styles.card}>
+                <div style={styles.cardHeader}><div><h2 style={styles.cardTitle}>Upcoming Follow Ups</h2><div style={styles.cardSub}>Who needs another message soon.</div></div></div>
+                <div style={styles.previewStack}>
+                  {records.filter((r) => r.followUpDue).sort((a, b) => a.followUpDate.localeCompare(b.followUpDate)).map((r) => (
+                    <div key={r.id} style={styles.previewCard}>
+                      <div style={styles.previewHead}><div style={styles.previewName}>{fullName(r)}</div><span style={styles.tag}>{r.followUpDate}</span></div>
+                      <div style={styles.previewMessage}>{r.suburb} · {r.crmTag} · {r.cell}</div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </div>
+          )}
         </main>
       </div>
     </div>
   );
 }
-
-function MetricCard({ title, value, bg }: { title: string; value: number; bg: string }) {
-  return <div style={{ ...styles.metricCard, background: bg }}><div style={styles.metricTitle}>{title}</div><div style={styles.metricValue}>{value}</div></div>;
-}
-
-function FocusCard({ title, value, subtitle, gradient }: { title: string; value: string; subtitle: string; gradient: string }) {
-  return <div style={styles.focusCard}><div style={{ ...styles.focusIcon, background: gradient }} /><div style={styles.focusCardTitle}>{title}</div><div style={styles.focusCardValue}>{value}</div><div style={styles.focusCardSub}>{subtitle}</div></div>;
-}
-
-function SearchField({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder: string }) {
-  return (
-    <div>
-      <label style={styles.label}>{label}</label>
-      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={styles.input} />
-    </div>
-  );
-}
-
-const styles: Record<string, React.CSSProperties> = {
-  page: { minHeight: "100vh", background: "linear-gradient(135deg,#eaf3ff 0%,#f7fbff 35%,#f8fafc 100%)", color: "#0f172a", fontFamily: 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif' },
-  layout: { display: "grid", minHeight: "100vh", gridTemplateColumns: "280px 1fr" },
-  sidebar: { background: "#0b1730", color: "white" },
-  sidebarHeader: { borderBottom: "1px solid rgba(255,255,255,0.1)", padding: 24, display: "flex", gap: 16, alignItems: "center" },
-  logoBox: { width: 56, height: 56, borderRadius: 18, display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg,#22d3ee 0%,#2563eb 100%)", boxShadow: "0 18px 40px rgba(37,99,235,0.35)", fontSize: 26 },
-  brand: { fontSize: 22, fontWeight: 700 },
-  brandSub: { fontSize: 12, color: "rgba(207,250,254,0.8)" },
-  sidebarLabel: { marginBottom: 12, paddingLeft: 12, fontSize: 11, letterSpacing: "0.24em", textTransform: "uppercase", color: "rgba(207,250,254,0.6)" },
-  sidebarButton: { width: "100%", display: "flex", alignItems: "center", gap: 12, borderRadius: 18, padding: "14px 16px", background: "transparent", color: "#e2e8f0", border: "none", cursor: "pointer", marginBottom: 8, textAlign: "left", fontSize: 14 },
-  sidebarButtonActive: { background: "white", color: "#0f172a", boxShadow: "0 16px 30px rgba(15,23,42,0.25)" },
-  focusCardDark: { borderRadius: 28, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", padding: 16 },
-  focusTitle: { marginBottom: 12, fontSize: 14, fontWeight: 600 },
-  darkRow: { display: "flex", justifyContent: "space-between", background: "rgba(255,255,255,0.05)", borderRadius: 16, padding: "10px 12px", marginBottom: 10, fontSize: 14, color: "#e2e8f0" },
-  main: { padding: 32 },
-  hero: { overflow: "hidden", borderRadius: 34, border: "1px solid #e2e8f0", background: "white", boxShadow: "0 30px 80px rgba(15,23,42,0.09)", marginBottom: 24 },
-  heroTop: { background: "linear-gradient(120deg,#0f172a 0%,#1d4ed8 45%,#06b6d4 100%)", color: "white", padding: 32, display: "flex", justifyContent: "space-between", gap: 20, flexWrap: "wrap", alignItems: "center" },
-  heroTag: { display: "inline-flex", alignItems: "center", gap: 8, borderRadius: 999, background: "rgba(255,255,255,0.15)", padding: "6px 12px", fontSize: 12, fontWeight: 600, marginBottom: 10 },
-  heroTitle: { margin: 0, fontSize: 44, lineHeight: 1.05 },
-  heroText: { marginTop: 10, maxWidth: 860, fontSize: 15, color: "#cffafe" },
-  heroButtons: { display: "flex", gap: 10, flexWrap: "wrap" },
-  whiteButton: { borderRadius: 18, background: "white", color: "#0f172a", border: "none", padding: "14px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer", boxShadow: "0 12px 24px rgba(15,23,42,0.18)" },
-  ghostButton: { borderRadius: 18, background: "rgba(255,255,255,0.15)", color: "white", border: "none", padding: "14px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer" },
-  metricsGrid: { display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 16, padding: 24 },
-  metricCard: { borderRadius: 28, border: "1px solid #e2e8f0", padding: 20, boxShadow: "0 8px 18px rgba(15,23,42,0.05)" },
-  metricTitle: { fontSize: 13, fontWeight: 600, opacity: 0.75 },
-  metricValue: { marginTop: 10, fontSize: 34, fontWeight: 700 },
-  card: { borderRadius: 32, border: "1px solid #e2e8f0", background: "white", padding: 24, boxShadow: "0 8px 18px rgba(15,23,42,0.05)" },
-  twoCol: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 },
-  cardHeader: { display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", marginBottom: 16 },
-  cardTitle: { margin: 0, fontSize: 24, fontWeight: 700 },
-  cardSub: { marginTop: 4, fontSize: 14, color: "#64748b" },
-  topBadge: { borderRadius: 999, background: "#eff6ff", color: "#1d4ed8", padding: "8px 12px", fontSize: 12, fontWeight: 600 },
-  focusGrid: { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 16 },
-  focusCard: { borderRadius: 28, border: "1px solid #e2e8f0", background: "white", padding: 20, boxShadow: "0 8px 18px rgba(15,23,42,0.05)" },
-  focusIcon: { width: 46, height: 46, borderRadius: 16, marginBottom: 14 },
-  focusCardTitle: { fontSize: 14, fontWeight: 600, color: "#64748b" },
-  focusCardValue: { marginTop: 10, fontSize: 28, fontWeight: 700, color: "#0f172a" },
-  focusCardSub: { marginTop: 6, fontSize: 12, color: "#64748b" },
-  contactsSearchGridUltraWide: { display: "grid", gridTemplateColumns: "repeat(6, minmax(180px, 1fr))", gap: 12, marginBottom: 18, alignItems: "end" },
-  contactsActionsRow: { display: "flex", gap: 12, marginBottom: 18, flexWrap: "wrap" },
-  bulkActionBar: { display: "flex", gap: 12, flexWrap: "wrap", marginTop: 10, marginBottom: 18 },
-  bulkInfoBox: { borderRadius: 20, border: "1px solid #e2e8f0", background: "linear-gradient(135deg,#ffffff 0%,#f0fdf4 100%)", padding: 16, marginBottom: 18 },
-  bulkQueueMetaGrid: { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 },
-  tableWrap: { overflow: "auto", borderRadius: 28, border: "1px solid #e2e8f0" },
-  table: { width: "100%", borderCollapse: "collapse" as const, fontSize: 14 },
-  th: { background: "#f8fafc", color: "#475569", textAlign: "left" as const, padding: "14px 16px", fontWeight: 600, whiteSpace: "nowrap" },
-  td: { padding: "14px 16px", borderTop: "1px solid #e2e8f0", whiteSpace: "nowrap" },
-  listArea: { maxHeight: 760, overflow: "auto", paddingRight: 4 },
-  leadCard: { width: "100%", borderRadius: 18, border: "1px solid #e2e8f0", background: "white", padding: 16, textAlign: "left", boxShadow: "0 6px 14px rgba(15,23,42,0.04)" },
-  leadCardActive: { border: "1px solid #93c5fd", background: "linear-gradient(135deg,#eff6ff 0%,#ffffff 55%,#ecfeff 100%)" },
-  previewHead: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
-  previewName: { fontWeight: 700, color: "#0f172a" },
-  previewMessage: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: 12, color: "#475569", lineHeight: 1.5 },
-  previewStack: { display: "grid", gap: 12 },
-  previewCard: { borderRadius: 18, border: "1px solid #e2e8f0", background: "linear-gradient(135deg,#ffffff 0%,#f8fafc 100%)", padding: 16, boxShadow: "0 6px 14px rgba(15,23,42,0.04)", textAlign: "left", cursor: "pointer" },
-  scriptCard: { width: "100%", borderRadius: 18, border: "1px solid #e2e8f0", background: "linear-gradient(135deg,#ffffff 0%,#f8fafc 100%)", padding: 16, textAlign: "left", cursor: "pointer", boxShadow: "0 6px 14px rgba(15,23,42,0.04)", marginBottom: 12 },
-  emptyBox: { borderRadius: 18, background: "#f1f5f9", color: "#64748b", padding: 32, textAlign: "center" as const, fontSize: 14 },
-  avatar: { width: 44, height: 44, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg,#2563eb 0%,#06b6d4 100%)", color: "white", fontWeight: 700, boxShadow: "0 12px 24px rgba(37,99,235,0.2)", flexShrink: 0 },
-  avatarLarge: { width: 58, height: 58, fontSize: 18, borderRadius: 18 },
-  tag: { borderRadius: 999, padding: "6px 12px", fontSize: 12, fontWeight: 600, color: "#475569", background: "white", border: "1px solid #e2e8f0", boxShadow: "0 4px 10px rgba(15,23,42,0.04)" },
-  label: { display: "block", marginBottom: 8, fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.18em" },
-  input: { width: "100%", borderRadius: 18, border: "1px solid #e2e8f0", background: "white", padding: "14px 16px", fontSize: 14, boxShadow: "0 6px 14px rgba(15,23,42,0.04)", outline: "none", boxSizing: "border-box" },
-  select: { width: "100%", borderRadius: 18, border: "1px solid #e2e8f0", background: "white", padding: "14px 16px", fontSize: 14, boxShadow: "0 6px 14px rgba(15,23,42,0.04)", outline: "none" },
-  textarea: { width: "100%", minHeight: 180, borderRadius: 18, border: "1px solid #e2e8f0", background: "white", padding: 16, fontSize: 14, boxShadow: "inset 0 2px 6px rgba(15,23,42,0.05)", outline: "none", resize: "vertical" as const, boxSizing: "border-box" },
-  formGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 20 },
-  infoTile: { borderRadius: 18, border: "1px solid #e2e8f0", background: "white", padding: "12px 14px", boxShadow: "0 6px 14px rgba(15,23,42,0.04)" },
-  infoLabel: { fontSize: 11, textTransform: "uppercase", letterSpacing: "0.14em", color: "#64748b", marginBottom: 6 },
-  infoValue: { fontSize: 14, fontWeight: 600, color: "#0f172a" },
-};
