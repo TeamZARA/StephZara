@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 type Status = "New" | "Waiting" | "Interested" | "Appointment" | "Do Not Contact";
 type View = "dashboard" | "contacts" | "leads" | "pipeline" | "scripts" | "bulk" | "manager";
@@ -42,6 +42,10 @@ type ScriptTemplate = {
   category: string;
   content: string;
 };
+
+const STORAGE_CONTACTS_KEY = "stephzara_contacts_v2";
+const STORAGE_SCRIPTS_KEY = "stephzara_scripts_v2";
+const STORAGE_CSV_NAME_KEY = "stephzara_csv_name_v2";
 
 const seed: ContactRecord[] = [
   {
@@ -280,14 +284,35 @@ function normalizeHeader(header: string) {
   return header.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+function buildWhatsAppUrl(phoneRaw: string, message: string) {
+  const phone = phoneRaw.replace(/\D/g, "");
+  return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+}
+
 export default function App() {
   const [view, setView] = useState<View>("dashboard");
-  const [records, setRecords] = useState<ContactRecord[]>(seed);
+  const [records, setRecords] = useState<ContactRecord[]>(() => {
+    const stored = localStorage.getItem(STORAGE_CONTACTS_KEY);
+    if (!stored) return seed;
+    try {
+      return JSON.parse(stored) as ContactRecord[];
+    } catch {
+      return seed;
+    }
+  });
   const [selectedId, setSelectedId] = useState("3");
   const [selectedScriptId, setSelectedScriptId] = useState("s3");
   const [selectedBulk, setSelectedBulk] = useState<Record<string, boolean>>({});
-  const [csvName, setCsvName] = useState("No file selected");
-  const [scripts, setScripts] = useState<ScriptTemplate[]>(defaultScripts);
+  const [csvName, setCsvName] = useState(() => localStorage.getItem(STORAGE_CSV_NAME_KEY) || "No file selected");
+  const [scripts, setScripts] = useState<ScriptTemplate[]>(() => {
+    const stored = localStorage.getItem(STORAGE_SCRIPTS_KEY);
+    if (!stored) return defaultScripts;
+    try {
+      return JSON.parse(stored) as ScriptTemplate[];
+    } catch {
+      return defaultScripts;
+    }
+  });
   const [scriptName, setScriptName] = useState("");
   const [scriptCategory, setScriptCategory] = useState("Canvassing");
   const [scriptContent, setScriptContent] = useState("");
@@ -299,7 +324,20 @@ export default function App() {
     });
     return obj;
   });
+  const [bulkQueueIndex, setBulkQueueIndex] = useState(0);
   const fileRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_CONTACTS_KEY, JSON.stringify(records));
+  }, [records]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_SCRIPTS_KEY, JSON.stringify(scripts));
+  }, [scripts]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_CSV_NAME_KEY, csvName);
+  }, [csvName]);
 
   const filtered = useMemo(() => {
     return records.filter((record) => {
@@ -342,6 +380,9 @@ export default function App() {
   const selectedScript = scripts.find((s) => s.id === selectedScriptId) || scripts[0];
   const message = renderScript(selectedScript.content, selected);
 
+  const bulkTargets = filtered.filter((r) => selectedBulk[r.id]);
+  const bulkTarget = bulkTargets[bulkQueueIndex] || null;
+
   const stats = {
     total: records.length,
     due: records.filter((r) => r.followUpDue && r.status !== "Do Not Contact").length,
@@ -365,8 +406,8 @@ export default function App() {
   };
 
   const openWhatsApp = () => {
-    const phone = (selected.cell || selected.phone).replace(/\D/g, "");
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank");
+    const phoneSource = selected.cell || selected.phone;
+    window.open(buildWhatsAppUrl(phoneSource, message), "_blank");
   };
 
   const nextLead = () => {
@@ -420,23 +461,61 @@ export default function App() {
   };
 
   const exportBulk = () => {
-    const rows = filtered
-      .filter((r) => selectedBulk[r.id])
-      .map((r) => ({
-        Category: r.category,
-        Name: r.name,
-        Surname: r.surname,
-        Email: r.email,
-        Cell: r.cell,
-        Address: r.address,
-        Phone: r.phone,
-        Message: renderScript(selectedScript.content, r),
-      }));
+    const rows = bulkTargets.map((r) => ({
+      Category: r.category,
+      Name: r.name,
+      Surname: r.surname,
+      Email: r.email,
+      Cell: r.cell,
+      Address: r.address,
+      Phone: r.phone,
+      Message: renderScript(selectedScript.content, r),
+      ScriptName: selectedScript.name,
+      WhatsAppLink: buildWhatsAppUrl(r.cell || r.phone, renderScript(selectedScript.content, r)),
+    }));
     if (!rows.length) {
       alert("Select at least one contact first");
       return;
     }
     downloadCsv("propcon_bulk_export.csv", rows);
+  };
+
+  const openBulkSend = () => {
+    if (!bulkTargets.length) {
+      alert("Select contacts in Contacts first");
+      return;
+    }
+    setBulkQueueIndex(0);
+    setView("bulk");
+    const first = bulkTargets[0];
+    const firstMessage = `[${selectedScript.name}]\n${renderScript(selectedScript.content, first)}`;
+    window.open(buildWhatsAppUrl(first.cell || first.phone, firstMessage), "_blank");
+  };
+
+  const openNextBulkWhatsApp = () => {
+    if (!bulkTargets.length) {
+      alert("No bulk contacts selected");
+      return;
+    }
+    const nextIndex = bulkQueueIndex + 1;
+    if (nextIndex >= bulkTargets.length) {
+      alert("You have opened all selected WhatsApp messages");
+      return;
+    }
+    setBulkQueueIndex(nextIndex);
+    const target = bulkTargets[nextIndex];
+    const msg = `[${selectedScript.name}]\n${renderScript(selectedScript.content, target)}`;
+    window.open(buildWhatsAppUrl(target.cell || target.phone, msg), "_blank");
+  };
+
+  const copyCurrentBulkMessage = async () => {
+    if (!bulkTarget) return;
+    try {
+      await navigator.clipboard.writeText(`[${selectedScript.name}]\n${renderScript(selectedScript.content, bulkTarget)}`);
+      alert("Bulk message copied");
+    } catch {
+      alert("Could not copy bulk message");
+    }
   };
 
   const handleImportClick = () => fileRef.current?.click();
@@ -498,7 +577,7 @@ export default function App() {
     setRecords((prev) => [...imported, ...prev]);
     setSelectedId(imported[0].id);
     setView("contacts");
-    alert(`${imported.length} contacts imported`);
+    alert(`${imported.length} contacts imported and saved in this browser`);
   };
 
   const saveScript = () => {
@@ -561,9 +640,9 @@ export default function App() {
           <section style={styles.hero}>
             <div style={styles.heroTop}>
               <div>
-                <div style={styles.heroTag}>✨ CSV fields now match your PropCon headings</div>
+                <div style={styles.heroTag}>✨ Search fields now line up next to each other</div>
                 <h1 style={styles.heroTitle}>Lead Management Dashboard</h1>
-                <p style={styles.heroText}>Import the CSV and instantly search by Category, Name, Surname, Email, Cell, Address, Phone, Type, ID Number, BirthDay, Tags, Source, Wish Lists, Matches, SMS, Emails, WhatsApp, Opt-In, Agents, Loaded, Modified, and Last Contacted.</p>
+                <p style={styles.heroText}>Imported CSV files are now saved in the browser so you can come back to them, and bulk send opens WhatsApp with the selected script name and phone number already prepared.</p>
               </div>
               <div style={styles.heroButtons}>
                 <button onClick={handleImportClick} style={styles.whiteButton}>📤 Import CSV</button>
@@ -584,12 +663,12 @@ export default function App() {
               <div style={styles.cardHeader}>
                 <div>
                   <h2 style={styles.cardTitle}>Contacts</h2>
-                  <div style={styles.cardSub}>Every CSV heading now has its own search box.</div>
+                  <div style={styles.cardSub}>Each CSV heading has its own search field, arranged next to each other in a wide grid.</div>
                 </div>
                 <div style={styles.topBadge}>{filtered.length} results • {csvName}</div>
               </div>
 
-              <div style={styles.contactsSearchGridWide}>
+              <div style={styles.contactsSearchGridUltraWide}>
                 <SearchField label="Quick Search" value={quickSearch} onChange={setQuickSearch} placeholder="Search all fields" />
                 {csvFieldDefs.map((field) => (
                   <SearchField
@@ -597,15 +676,15 @@ export default function App() {
                     label={field.label}
                     value={fieldSearch[field.key] || ""}
                     onChange={(value) => setFieldSearch((prev) => ({ ...prev, [field.key]: value }))}
-                    placeholder={`Search ${field.label}`}
+                    placeholder={field.label}
                   />
                 ))}
               </div>
 
               <div style={styles.contactsActionsRow}>
-                <button onClick={() => { const next: Record<string, boolean> = {}; filtered.forEach((r) => { next[r.id] = true; }); setSelectedBulk(next); }} style={styles.secondaryAction}>Select All Results</button>
-                <button onClick={() => setSelectedBulk({})} style={styles.secondaryAction}>Clear Selection</button>
-                <button onClick={() => setView("bulk")} style={styles.darkButton}>Open Bulk Send</button>
+                <button onClick={() => { const next: Record<string, boolean> = {}; filtered.forEach((r) => { next[r.id] = true; }); setSelectedBulk(next); setBulkQueueIndex(0); }} style={styles.secondaryAction}>Select All Results</button>
+                <button onClick={() => { setSelectedBulk({}); setBulkQueueIndex(0); }} style={styles.secondaryAction}>Clear Selection</button>
+                <button onClick={openBulkSend} style={styles.darkButton}>Open Bulk Send</button>
               </div>
 
               <div style={styles.tableWrap}>
@@ -659,7 +738,7 @@ export default function App() {
                 <div style={styles.actionRow3}>
                   <button onClick={saveScript} style={styles.darkButtonWide}>💾 Save Script</button>
                   <button onClick={() => { setScriptName(""); setScriptCategory("Canvassing"); setScriptContent(""); }} style={styles.secondaryAction}>Clear</button>
-                  <button onClick={() => setView("leads")} style={styles.secondaryAction}>Use in Lead Desk</button>
+                  <button onClick={() => setView("contacts")} style={styles.secondaryAction}>Use in Contacts</button>
                 </div>
               </section>
             </div>
@@ -668,7 +747,7 @@ export default function App() {
           {view === "bulk" && (
             <div style={styles.twoCol}>
               <section style={styles.card}>
-                <div style={styles.cardHeader}><div><h2 style={styles.cardTitle}>Bulk Send Builder</h2><div style={styles.cardSub}>Filtered search results from Contacts can be bulk-selected here.</div></div><button onClick={exportBulk} style={styles.darkButton}>📥 Export CSV</button></div>
+                <div style={styles.cardHeader}><div><h2 style={styles.cardTitle}>Bulk Send Builder</h2><div style={styles.cardSub}>Open WhatsApp one selected contact at a time with the script name placed at the top of the message.</div></div><button onClick={exportBulk} style={styles.darkButton}>📥 Export CSV</button></div>
                 <div style={styles.formGrid}>
                   <div>
                     <label style={styles.label}>Script for bulk batch</label>
@@ -678,8 +757,24 @@ export default function App() {
                   </div>
                   <div>
                     <label style={styles.label}>Selected Contacts</label>
-                    <input value={`${filtered.filter((r) => selectedBulk[r.id]).length} selected`} readOnly style={styles.input} />
+                    <input value={`${bulkTargets.length} selected`} readOnly style={styles.input} />
                   </div>
+                </div>
+                <div style={styles.bulkActionBar}>
+                  <button onClick={openBulkSend} style={styles.whatsAppAction}>Open First in WhatsApp</button>
+                  <button onClick={openNextBulkWhatsApp} style={styles.darkButton}>Open Next</button>
+                  <button onClick={copyCurrentBulkMessage} style={styles.secondaryAction}>Copy Current Message</button>
+                </div>
+                <div style={styles.bulkInfoBox}>
+                  {bulkTarget ? (
+                    <>
+                      <div style={styles.previewHead}><div style={styles.previewName}>Current Queue Item: {bulkQueueIndex + 1} / {bulkTargets.length}</div><Tag text={selectedScript.name} /></div>
+                      <div style={{ ...styles.previewMessage, marginBottom: 8 }}><strong>{fullName(bulkTarget)}</strong> · {bulkTarget.cell || bulkTarget.phone}</div>
+                      <div style={styles.previewMessage}>{`[${selectedScript.name}]\n${renderScript(selectedScript.content, bulkTarget)}`}</div>
+                    </>
+                  ) : (
+                    <div style={styles.emptyBox}>Select contacts in Contacts first, then open Bulk Send.</div>
+                  )}
                 </div>
                 <div style={styles.tableWrap}>
                   <table style={styles.table}>
@@ -711,12 +806,13 @@ export default function App() {
                 </div>
               </section>
               <section style={styles.card}>
-                <div style={styles.cardHeader}><div><h2 style={styles.cardTitle}>Preview Panel</h2><div style={styles.cardSub}>What your canvasser will send.</div></div></div>
+                <div style={styles.cardHeader}><div><h2 style={styles.cardTitle}>Preview Panel</h2><div style={styles.cardSub}>Each selected contact gets their own WhatsApp-ready message.</div></div></div>
                 <div style={styles.previewStack}>
-                  {filtered.filter((r) => selectedBulk[r.id]).length ? filtered.filter((r) => selectedBulk[r.id]).map((record) => (
+                  {bulkTargets.length ? bulkTargets.map((record, index) => (
                     <div key={record.id} style={styles.previewCard}>
-                      <div style={styles.previewHead}><div style={styles.previewName}>{fullName(record)}</div><Tag text={record.category} /></div>
-                      <div style={styles.previewMessage}>{renderScript(selectedScript.content, record)}</div>
+                      <div style={styles.previewHead}><div style={styles.previewName}>{index + 1}. {fullName(record)}</div><Tag text={selectedScript.name} /></div>
+                      <div style={{ ...styles.previewMessage, marginBottom: 8 }}>{record.cell || record.phone}</div>
+                      <div style={styles.previewMessage}>{`[${selectedScript.name}]\n${renderScript(selectedScript.content, record)}`}</div>
                     </div>
                   )) : <div style={styles.emptyBox}>Select contacts to preview the batch.</div>}
                 </div>
@@ -724,10 +820,10 @@ export default function App() {
             </div>
           )}
 
-          {view === "dashboard" && <div style={styles.emptyBox}>Dashboard remains available. Use Contacts for the new CSV-heading search workflow.</div>}
-          {view === "leads" && <div style={styles.emptyBox}>Lead Desk remains available in the repo version. This update focused on your new Contacts + CSV heading search requirement.</div>}
-          {view === "pipeline" && <div style={styles.emptyBox}>Pipeline remains available in the repo version. This update focused on your new Contacts + CSV heading search requirement.</div>}
-          {view === "manager" && <div style={styles.emptyBox}>Manager view remains available in the repo version. This update focused on your new Contacts + CSV heading search requirement.</div>}
+          {view === "dashboard" && <div style={styles.emptyBox}>Dashboard remains available. Use Contacts for the CSV heading search workflow and Bulk Send for WhatsApp queue sending.</div>}
+          {view === "leads" && <div style={styles.emptyBox}>Lead Desk remains available in the repo version. This update focused on your saved CSV + side-by-side search + WhatsApp bulk queue request.</div>}
+          {view === "pipeline" && <div style={styles.emptyBox}>Pipeline remains available in the repo version. This update focused on your saved CSV + side-by-side search + WhatsApp bulk queue request.</div>}
+          {view === "manager" && <div style={styles.emptyBox}>Manager view remains available in the repo version. This update focused on your saved CSV + side-by-side search + WhatsApp bulk queue request.</div>}
         </main>
       </div>
     </div>
@@ -808,14 +904,15 @@ const styles: Record<string, React.CSSProperties> = {
   bestLeadName: { fontSize: 22, fontWeight: 700 },
   bestLeadMeta: { marginTop: 4, fontSize: 14, color: "#64748b" },
   tagRow: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 },
-  actionRow: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 20 },
   actionRow3: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 16 },
   secondaryAction: { borderRadius: 18, border: "1px solid #e2e8f0", background: "white", color: "#0f172a", padding: "14px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer", boxShadow: "0 6px 16px rgba(15,23,42,0.05)" },
   whatsAppAction: { borderRadius: 18, border: "none", background: "linear-gradient(90deg,#10b981 0%,#06b6d4 100%)", color: "white", padding: "14px 16px", fontSize: 14, fontWeight: 700, cursor: "pointer", boxShadow: "0 14px 28px rgba(16,185,129,0.25)" },
   darkButton: { borderRadius: 18, background: "#0f172a", color: "white", border: "none", padding: "12px 16px", fontSize: 14, fontWeight: 700, cursor: "pointer", boxShadow: "0 12px 24px rgba(15,23,42,0.16)" },
   darkButtonWide: { borderRadius: 18, background: "linear-gradient(90deg,#0f172a 0%,#334155 100%)", color: "white", border: "none", padding: "14px 16px", fontSize: 14, fontWeight: 700, cursor: "pointer", boxShadow: "0 12px 24px rgba(15,23,42,0.16)" },
-  contactsSearchGridWide: { display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 14, marginBottom: 18 },
+  contactsSearchGridUltraWide: { display: "grid", gridTemplateColumns: "repeat(6, minmax(180px, 1fr))", gap: 12, marginBottom: 18, alignItems: "end" },
   contactsActionsRow: { display: "flex", gap: 12, marginBottom: 18, flexWrap: "wrap" },
+  bulkActionBar: { display: "flex", gap: 12, flexWrap: "wrap", marginTop: 18, marginBottom: 18 },
+  bulkInfoBox: { borderRadius: 20, border: "1px solid #e2e8f0", background: "linear-gradient(135deg,#ffffff 0%,#f0fdf4 100%)", padding: 16, marginBottom: 18 },
   tableWrap: { overflow: "auto", borderRadius: 28, border: "1px solid #e2e8f0" },
   table: { width: "100%", borderCollapse: "collapse" as const, fontSize: 14 },
   th: { background: "#f8fafc", color: "#475569", textAlign: "left" as const, padding: "14px 16px", fontWeight: 600, whiteSpace: "nowrap" },
@@ -830,18 +927,6 @@ const styles: Record<string, React.CSSProperties> = {
   previewCard: { borderRadius: 18, border: "1px solid #e2e8f0", background: "linear-gradient(135deg,#ffffff 0%,#f8fafc 100%)", padding: 16, boxShadow: "0 6px 14px rgba(15,23,42,0.04)" },
   scriptCard: { width: "100%", borderRadius: 18, border: "1px solid #e2e8f0", background: "linear-gradient(135deg,#ffffff 0%,#f8fafc 100%)", padding: 16, textAlign: "left", cursor: "pointer", boxShadow: "0 6px 14px rgba(15,23,42,0.04)", marginBottom: 12 },
   emptyBox: { borderRadius: 18, background: "#f1f5f9", color: "#64748b", padding: 32, textAlign: "center" as const, fontSize: 14 },
-  chartStack: { display: "grid", gap: 18 },
-  chartLabelRow: { display: "flex", justifyContent: "space-between", marginBottom: 8, fontSize: 14, color: "#334155" },
-  barBg: { height: 12, background: "#e2e8f0", borderRadius: 999, overflow: "hidden" },
-  barFill: { height: "100%", background: "linear-gradient(90deg,#2563eb 0%,#06b6d4 100%)", borderRadius: 999 },
-  managerCard: { borderRadius: 18, border: "1px solid #e2e8f0", background: "linear-gradient(135deg,#ffffff 0%,#f8fafc 100%)", padding: 16, boxShadow: "0 6px 14px rgba(15,23,42,0.04)" },
-  managerHead: { display: "flex", justifyContent: "space-between", alignItems: "center" },
-  managerName: { fontWeight: 700, color: "#0f172a" },
-  darkBadge: { borderRadius: 999, background: "#0f172a", color: "white", padding: "6px 12px", fontSize: 12, fontWeight: 700 },
-  managerGrid: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10, marginTop: 12 },
-  miniBox: { borderRadius: 16, background: "#f1f5f9", padding: 12, textAlign: "center" as const },
-  miniLabel: { fontSize: 11, color: "#64748b", textTransform: "uppercase" as const, letterSpacing: "0.08em" },
-  miniValue: { marginTop: 6, fontSize: 20, fontWeight: 700, color: "#0f172a" },
   avatar: { width: 44, height: 44, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg,#2563eb 0%,#06b6d4 100%)", color: "white", fontWeight: 700, boxShadow: "0 12px 24px rgba(37,99,235,0.2)", flexShrink: 0 },
   avatarLarge: { width: 58, height: 58, fontSize: 18, borderRadius: 18 },
   statusPill: { borderRadius: 999, padding: "6px 12px", fontSize: 12, fontWeight: 700, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.04)" },
@@ -850,4 +935,5 @@ const styles: Record<string, React.CSSProperties> = {
   input: { width: "100%", borderRadius: 18, border: "1px solid #e2e8f0", background: "white", padding: "14px 16px", fontSize: 14, boxShadow: "0 6px 14px rgba(15,23,42,0.04)", outline: "none", boxSizing: "border-box" },
   select: { width: "100%", borderRadius: 18, border: "1px solid #e2e8f0", background: "white", padding: "14px 16px", fontSize: 14, boxShadow: "0 6px 14px rgba(15,23,42,0.04)", outline: "none" },
   textarea: { width: "100%", minHeight: 180, borderRadius: 18, border: "1px solid #e2e8f0", background: "white", padding: 16, fontSize: 14, boxShadow: "inset 0 2px 6px rgba(15,23,42,0.05)", outline: "none", resize: "vertical" as const, boxSizing: "border-box" },
+  formGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 20 },
 };
