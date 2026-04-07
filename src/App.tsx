@@ -629,7 +629,22 @@ export default function App() {
           </div>
           <div style={{ padding: 16 }}>
             <div style={styles.sidebarLabel}>Workspace</div>
-            {views.map((v) => (
+           {[
+  ["dashboard", "🏠", "Dashboard"],
+  ["contacts", "📒", "Contacts"],
+  ["scripts", "📝", "Scripts"],
+  ["bulk", "📤", "Bulk Send"],
+  ["manager", "📅", "Manager"],
+].map(([key, emoji, label]) => (
+  <button
+    key={String(key)}
+    onClick={() => setView(key as View)}
+    style={{ ...styles.sidebarButton, ...(view === key ? styles.sidebarButtonActive : {}) }}
+  >
+    <span>{emoji}</span>
+    <span>{label}</span>
+  </button>
+))}
               <button key={v.key} onClick={() => setView(v.key)} style={{ ...styles.sidebarButton, ...(view === v.key ? styles.sidebarButtonActive : {}) }}>
                 <span>{v.emoji}</span>
                 <span>{v.label}</span>
