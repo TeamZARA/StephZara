@@ -1,61 +1,52 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
+  Building2,
+  Home,
   Search,
+  Phone,
+  MessageSquare,
+  CalendarDays,
+  Bell,
   Upload,
   Download,
-  MessageSquare,
-  Phone,
-  MapPin,
+  Filter,
+  ChevronRight,
   Copy,
   Send,
-  Users,
-  Filter,
-  Bell,
-  ShieldCheck,
-  CalendarDays,
-  Ban,
-  FileSpreadsheet,
-  ChevronRight,
-  Star,
-  Bot,
   ArrowRight,
-  Building2,
-  UserRound,
+  Ban,
+  MapPin,
+  Users,
+  BarChart3,
   CheckCircle2,
+  Clock3,
+  Star,
   Sparkles,
+  FileSpreadsheet,
   LayoutGrid,
   ListChecks,
-  BarChart3,
-  Clock3,
+  Settings,
 } from "lucide-react";
 
-// Safer single-file CRM-style React app.
-// Frontend-only demo structure that is easy to adapt for Vercel once moved into your repo.
-
 type ContactStatus = "New" | "Waiting" | "Interested" | "Appointment" | "Do Not Contact";
-type TabKey = "dashboard" | "workspace" | "pipeline" | "import" | "bulk" | "manager" | "settings";
+type ViewKey = "dashboard" | "workspace" | "pipeline" | "import" | "bulk" | "manager";
 
 type Contact = {
   id: string;
   name: string;
   phone: string;
   suburb: string;
-  area: string;
   address: string;
   status: ContactStatus;
   script: string;
   assignedTo: string;
-  reply: string;
   notes: string;
+  reply: string;
   followUpDue: boolean;
-  score: number;
-  optedOut: boolean;
+  leadTemperature: "Cold" | "Warm" | "Hot";
+  valuationRange: string;
   source: string;
-  lastContacted?: string;
-  ownerType?: string;
-  leadTemperature?: "Cold" | "Warm" | "Hot";
-  valuationRange?: string;
 };
 
 const scripts: Record<string, string> = {
@@ -64,249 +55,94 @@ const scripts: Record<string, string> = {
   "Property Value": "Hi {{name}}, have you seen what homes in {{suburb}} are selling for lately?",
   "Annual Area Report": "Hi {{name}}, I’m sending out this year’s property update for {{suburb}}. Would you like me to send you the recent sales and area activity?",
   "Follow Up 1": "Hi {{name}}, just checking if you saw my previous message about {{suburb}}.",
-  "Follow Up 2": "Quick one {{name}} — would you consider selling in the next 6–12 months if the price was right?",
   "Appointment Close": "Thanks {{name}}. I can arrange a quick no-obligation valuation for your property in {{suburb}}. What day would suit you best?",
 };
 
-const contactsSeed: Contact[] = [
-  {
-    id: "c1",
-    name: "Janine Smith",
-    phone: "+27 82 555 0141",
-    suburb: "Durbanville",
-    area: "Durbanville",
-    address: "12 Oak Street",
-    status: "New",
-    script: "Recent Sales",
-    assignedTo: "Lerato",
-    reply: "",
-    notes: "Fresh PropCon import",
-    followUpDue: true,
-    score: 0,
-    optedOut: false,
-    source: "PropCon CSV",
-    lastContacted: "",
-    ownerType: "Owner Occupier",
-    leadTemperature: "Cold",
-    valuationRange: "R3.8m - R4.2m",
-  },
-  {
-    id: "c2",
-    name: "Peter Jacobs",
-    phone: "+27 83 555 0198",
-    suburb: "Blouberg",
-    area: "Blouberg",
-    address: "85 Marine Road",
-    status: "Waiting",
-    script: "Buyer Enquiry",
-    assignedTo: "Lerato",
-    reply: "Seen, no reply",
-    notes: "Follow-up today",
-    followUpDue: true,
-    score: 1,
-    optedOut: false,
-    source: "PropCon CSV",
-    lastContacted: "2026-04-01",
-    ownerType: "Investor",
-    leadTemperature: "Cold",
-    valuationRange: "R5.5m - R6.1m",
-  },
-  {
-    id: "c3",
-    name: "Ayesha Daniels",
-    phone: "+27 81 555 0102",
-    suburb: "Parklands",
-    area: "Parklands",
-    address: "44 Sandpiper Ave",
-    status: "Interested",
-    script: "Property Value",
-    assignedTo: "Lerato",
-    reply: "Yes, please send recent sales.",
-    notes: "Warm lead. Wants area stats before next week.",
-    followUpDue: false,
-    score: 8,
-    optedOut: false,
-    source: "PropCon CSV",
-    lastContacted: "2026-04-02",
-    ownerType: "Owner Occupier",
-    leadTemperature: "Warm",
-    valuationRange: "R2.4m - R2.8m",
-  },
-  {
-    id: "c4",
-    name: "Gavin Naidoo",
-    phone: "+27 72 555 0135",
-    suburb: "Table View",
-    area: "Table View",
-    address: "17 Beach Road",
-    status: "Appointment",
-    script: "Appointment Close",
-    assignedTo: "Megan",
-    reply: "We may sell later this year.",
-    notes: "Valuation booked for Friday 10:00.",
-    followUpDue: false,
-    score: 15,
-    optedOut: false,
-    source: "PropCon CSV",
-    lastContacted: "2026-04-02",
-    ownerType: "Owner Occupier",
-    leadTemperature: "Hot",
-    valuationRange: "R6.7m - R7.4m",
-  },
-  {
-    id: "c5",
-    name: "Melissa van Wyk",
-    phone: "+27 79 555 0180",
-    suburb: "Milnerton",
-    area: "Milnerton",
-    address: "23 Sunset Drive",
-    status: "Do Not Contact",
-    script: "Annual Area Report",
-    assignedTo: "Lerato",
-    reply: "No thanks",
-    notes: "Opted out.",
-    followUpDue: false,
-    score: 0,
-    optedOut: true,
-    source: "PropCon CSV",
-    lastContacted: "2026-03-31",
-    ownerType: "Owner Occupier",
-    leadTemperature: "Cold",
-    valuationRange: "R4.1m - R4.5m",
-  },
+const seed: Contact[] = [
+  { id: "c1", name: "Janine Smith", phone: "+27 82 555 0141", suburb: "Durbanville", address: "12 Oak Street", status: "New", script: "Recent Sales", assignedTo: "Lerato", notes: "Fresh PropCon import", reply: "", followUpDue: true, leadTemperature: "Cold", valuationRange: "R3.8m - R4.2m", source: "PropCon CSV" },
+  { id: "c2", name: "Peter Jacobs", phone: "+27 83 555 0198", suburb: "Blouberg", address: "85 Marine Road", status: "Waiting", script: "Buyer Enquiry", assignedTo: "Lerato", notes: "Follow-up today", reply: "Seen, no reply", followUpDue: true, leadTemperature: "Cold", valuationRange: "R5.5m - R6.1m", source: "PropCon CSV" },
+  { id: "c3", name: "Ayesha Daniels", phone: "+27 81 555 0102", suburb: "Parklands", address: "44 Sandpiper Ave", status: "Interested", script: "Property Value", assignedTo: "Lerato", notes: "Warm lead", reply: "Yes, please send recent sales.", followUpDue: false, leadTemperature: "Warm", valuationRange: "R2.4m - R2.8m", source: "PropCon CSV" },
+  { id: "c4", name: "Gavin Naidoo", phone: "+27 72 555 0135", suburb: "Table View", address: "17 Beach Road", status: "Appointment", script: "Appointment Close", assignedTo: "Megan", notes: "Valuation booked", reply: "We may sell later this year.", followUpDue: false, leadTemperature: "Hot", valuationRange: "R6.7m - R7.4m", source: "PropCon CSV" },
+  { id: "c5", name: "Melissa van Wyk", phone: "+27 79 555 0180", suburb: "Milnerton", address: "23 Sunset Drive", status: "Do Not Contact", script: "Annual Area Report", assignedTo: "Lerato", notes: "Opted out", reply: "No thanks", followUpDue: false, leadTemperature: "Cold", valuationRange: "R4.1m - R4.5m", source: "PropCon CSV" },
 ];
 
-const assignees = ["Lerato", "Megan", "Unassigned"];
-const statuses = ["All", "New", "Waiting", "Interested", "Appointment", "Do Not Contact"];
-const statusOrder: ContactStatus[] = ["New", "Waiting", "Interested", "Appointment", "Do Not Contact"];
+const views: { key: ViewKey; label: string; icon: React.ComponentType<{ size?: number; className?: string }> }[] = [
+  { key: "dashboard", label: "Dashboard", icon: Home },
+  { key: "workspace", label: "Workspace", icon: MessageSquare },
+  { key: "pipeline", label: "Pipeline", icon: LayoutGrid },
+  { key: "import", label: "Import", icon: Upload },
+  { key: "bulk", label: "Bulk Export", icon: FileSpreadsheet },
+  { key: "manager", label: "Manager", icon: BarChart3 },
+];
 
-function renderTemplate(template: string, contact: Contact) {
-  return template.replace(/\{\{name\}\}/g, contact.name || "there").replace(/\{\{suburb\}\}/g, contact.suburb || contact.area || "your area");
+const statuses: Array<ContactStatus | "All"> = ["All", "New", "Waiting", "Interested", "Appointment", "Do Not Contact"];
+const assignees = ["All", "Lerato", "Megan", "Unassigned"];
+const pipelineOrder: ContactStatus[] = ["New", "Waiting", "Interested", "Appointment", "Do Not Contact"];
+
+function initials(name: string) {
+  return name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase();
 }
 
-function cleanPhoneForWhatsApp(phone: string) {
+function renderTemplate(template: string, contact: Contact) {
+  return template.replace(/\{\{name\}\}/g, contact.name).replace(/\{\{suburb\}\}/g, contact.suburb);
+}
+
+function cleanPhone(phone: string) {
   return phone.replace(/\D/g, "");
 }
 
-function buildWhatsAppLink(phone: string, message: string) {
-  return `https://wa.me/${cleanPhoneForWhatsApp(phone)}?text=${encodeURIComponent(message)}`;
+function whatsappUrl(phone: string, message: string) {
+  return `https://wa.me/${cleanPhone(phone)}?text=${encodeURIComponent(message)}`;
 }
 
-function parseCsv(text: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let cell = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < text.length; i += 1) {
-    const char = text[i];
-    const next = text[i + 1];
-    if (char === '"') {
-      if (inQuotes && next === '"') {
-        cell += '"';
-        i += 1;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (char === "," && !inQuotes) {
-      row.push(cell);
-      cell = "";
-    } else if ((char === "\n" || char === "\r") && !inQuotes) {
-      if (char === "\r" && next === "\n") i += 1;
-      row.push(cell);
-      rows.push(row);
-      row = [];
-      cell = "";
-    } else {
-      cell += char;
-    }
-  }
-  if (cell.length || row.length) {
-    row.push(cell);
-    rows.push(row);
-  }
-  return rows;
+function badgeClasses(status: ContactStatus) {
+  if (status === "New") return "bg-slate-100 text-slate-700 border-slate-200";
+  if (status === "Waiting") return "bg-amber-100 text-amber-800 border-amber-200";
+  if (status === "Interested") return "bg-emerald-100 text-emerald-800 border-emerald-200";
+  if (status === "Appointment") return "bg-sky-100 text-sky-800 border-sky-200";
+  return "bg-rose-100 text-rose-800 border-rose-200";
 }
 
-function csvEscape(value: unknown) {
-  const str = String(value ?? "");
-  if (/[",\n]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
-  return str;
-}
-
-function objectsToCsv(rows: Record<string, unknown>[]) {
-  if (!rows.length) return "";
-  const headers = Object.keys(rows[0]);
-  const lines = [headers.join(",")];
-  rows.forEach((row) => lines.push(headers.map((h) => csvEscape(row[h])).join(",")));
-  return lines.join("\n");
-}
-
-function downloadCsv(filename: string, content: string) {
-  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
-function initials(name: string) {
-  return name
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+function tempClasses(temp: Contact["leadTemperature"]) {
+  if (temp === "Hot") return "bg-rose-500";
+  if (temp === "Warm") return "bg-amber-500";
+  return "bg-slate-400";
 }
 
 export default function App() {
-  const [contacts, setContacts] = useState<Contact[]>(contactsSeed);
-  const [selectedId, setSelectedId] = useState("c3");
+  const [contacts, setContacts] = useState<Contact[]>(seed);
+  const [view, setView] = useState<ViewKey>("dashboard");
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState<ContactStatus | "All">("All");
   const [assigneeFilter, setAssigneeFilter] = useState("All");
-  const [bulkScript, setBulkScript] = useState("Recent Sales");
+  const [selectedId, setSelectedId] = useState("c3");
   const [selectedScript, setSelectedScript] = useState("Property Value");
-  const [selectedRows, setSelectedRows] = useState<Record<string, boolean>>({});
-  const [activeTab, setActiveTab] = useState<TabKey>("dashboard");
-  const [csvName, setCsvName] = useState("No file selected");
-  const fileRef = useRef<HTMLInputElement | null>(null);
-
-  const selected = contacts.find((c) => c.id === selectedId) || contacts[0];
+  const [bulkSelected, setBulkSelected] = useState<Record<string, boolean>>({});
+  const [csvName, setCsvName] = useState("propcon_leads_april.csv");
 
   const filtered = useMemo(() => {
     return contacts.filter((c) => {
-      const haystack = [c.name, c.phone, c.suburb, c.address, c.notes, c.assignedTo, c.ownerType].join(" ").toLowerCase();
-      const matchesSearch = haystack.includes(search.toLowerCase());
-      const matchesStatus = statusFilter === "All" ? true : c.status === statusFilter;
-      const matchesAssignee = assigneeFilter === "All" ? true : c.assignedTo === assigneeFilter;
-      return matchesSearch && matchesStatus && matchesAssignee;
+      const hay = `${c.name} ${c.phone} ${c.suburb} ${c.address} ${c.assignedTo}`.toLowerCase();
+      const searchMatch = hay.includes(search.toLowerCase());
+      const statusMatch = statusFilter === "All" ? true : c.status === statusFilter;
+      const assigneeMatch = assigneeFilter === "All" ? true : c.assignedTo === assigneeFilter;
+      return searchMatch && statusMatch && assigneeMatch;
     });
   }, [contacts, search, statusFilter, assigneeFilter]);
 
-  const metrics = useMemo(() => {
+  const selected = filtered.find((c) => c.id === selectedId) || contacts.find((c) => c.id === selectedId) || contacts[0];
+  const draftMessage = selected ? renderTemplate(scripts[selectedScript], selected) : "";
+
+  const stats = useMemo(() => {
     const total = contacts.length;
     const interested = contacts.filter((c) => c.status === "Interested").length;
     const appointments = contacts.filter((c) => c.status === "Appointment").length;
-    const replies = contacts.filter((c) => c.reply && c.reply !== "Seen, no reply").length;
-    const due = contacts.filter((c) => c.followUpDue && !c.optedOut).length;
-    const warm = contacts.filter((c) => c.leadTemperature === "Warm" || c.leadTemperature === "Hot").length;
-    return {
-      total,
-      interested,
-      appointments,
-      due,
-      warm,
-      replyRate: total ? Math.round((replies / total) * 100) : 0,
-      conversionRate: interested ? Math.round((appointments / interested) * 100) : 0,
-    };
+    const due = contacts.filter((c) => c.followUpDue && c.status !== "Do Not Contact").length;
+    const warm = contacts.filter((c) => c.leadTemperature !== "Cold").length;
+    return { total, interested, appointments, due, warm };
   }, [contacts]);
 
-  const suburbRows = useMemo(() => {
+  const suburbStats = useMemo(() => {
     const map: Record<string, { suburb: string; total: number; interested: number; appointments: number }> = {};
     contacts.forEach((c) => {
       if (!map[c.suburb]) map[c.suburb] = { suburb: c.suburb, total: 0, interested: 0, appointments: 0 };
@@ -314,38 +150,12 @@ export default function App() {
       if (c.status === "Interested") map[c.suburb].interested += 1;
       if (c.status === "Appointment") map[c.suburb].appointments += 1;
     });
-    return Object.values(map).sort((a, b) => b.total - a.total);
+    return Object.values(map);
   }, [contacts]);
 
-  const pipelineCounts = useMemo(() => {
-    return statusOrder.map((status) => ({
-      status,
-      items: filtered.filter((c) => c.status === status),
-    }));
-  }, [filtered]);
-
-  const selectedCount = filtered.filter((c) => selectedRows[c.id]).length;
-  const bulkRows = filtered.filter((c) => selectedRows[c.id]);
-  const draftMessage = selected ? renderTemplate(scripts[selectedScript], selected) : "";
-
-  const updateSelected = (patch: Partial<Contact>) => {
-    if (!selected) return;
-    setContacts((prev) => prev.map((c) => (c.id === selected.id ? { ...c, ...patch } : c)));
-  };
-
-  const markStatus = (status: ContactStatus) => {
-    if (!selected) return;
-    const score = status === "Interested" ? 8 : status === "Appointment" ? 15 : status === "Waiting" ? 1 : 0;
-    updateSelected({
-      status,
-      score,
-      optedOut: status === "Do Not Contact",
-      leadTemperature: status === "Appointment" ? "Hot" : status === "Interested" ? "Warm" : selected.leadTemperature,
-    });
-  };
+  const pipeline = useMemo(() => pipelineOrder.map((status) => ({ status, items: filtered.filter((c) => c.status === status) })), [filtered]);
 
   const copyMessage = async () => {
-    if (!draftMessage) return;
     try {
       await navigator.clipboard.writeText(draftMessage);
       alert("Message copied");
@@ -356,13 +166,13 @@ export default function App() {
 
   const openWhatsApp = () => {
     if (!selected) return;
-    window.open(buildWhatsAppLink(selected.phone, draftMessage), "_blank");
+    window.open(whatsappUrl(selected.phone, draftMessage), "_blank");
   };
 
   const nextContact = () => {
-    const currentIndex = filtered.findIndex((c) => c.id === selected.id);
-    if (currentIndex >= 0 && currentIndex < filtered.length - 1) {
-      const next = filtered[currentIndex + 1];
+    const idx = filtered.findIndex((c) => c.id === selected.id);
+    if (idx >= 0 && idx < filtered.length - 1) {
+      const next = filtered[idx + 1];
       setSelectedId(next.id);
       setSelectedScript(next.script);
     } else {
@@ -370,729 +180,533 @@ export default function App() {
     }
   };
 
-  const handleImportClick = () => fileRef.current?.click();
-
-  const handleCsvFile = async (file: File | null) => {
-    if (!file) return;
-    setCsvName(file.name);
-    const text = await file.text();
-    const rows = parseCsv(text);
-    if (rows.length < 2) return;
-
-    const headers = rows[0].map((h) => String(h || "").trim().toLowerCase());
-    const body = rows.slice(1).filter((r) => r.some((cell) => String(cell || "").trim() !== ""));
-
-    const imported = body
-      .map((row, index): Contact => {
-        const get = (candidates: string[]) => {
-          const idx = headers.findIndex((h) => candidates.some((cand) => h.includes(cand)));
-          return idx >= 0 ? String(row[idx] || "").trim() : "";
-        };
-        return {
-          id: `imp-${Date.now()}-${index}`,
-          name: get(["name", "owner", "contact"]),
-          phone: get(["phone", "mobile", "cell", "whatsapp"]),
-          suburb: get(["suburb", "area", "location"]),
-          area: get(["area", "suburb"]),
-          address: get(["address", "street"]),
-          status: "New",
-          script: "Recent Sales",
-          assignedTo: "Unassigned",
-          reply: "",
-          notes: get(["notes", "comments", "memo"]),
-          followUpDue: true,
-          score: 0,
-          optedOut: false,
-          source: "PropCon CSV",
-          lastContacted: "",
-          ownerType: "Unknown",
-          leadTemperature: "Cold",
-          valuationRange: "Pending",
-        };
-      })
-      .filter((r) => r.name || r.phone || r.address);
-
-    if (imported.length) {
-      setContacts((prev) => [...imported, ...prev]);
-      setSelectedId(imported[0].id);
-      setSelectedScript(imported[0].script);
-      setActiveTab("workspace");
-    }
+  const markStatus = (status: ContactStatus) => {
+    setContacts((prev) => prev.map((c) => c.id === selected.id ? { ...c, status, followUpDue: status === "Waiting", leadTemperature: status === "Appointment" ? "Hot" : status === "Interested" ? "Warm" : c.leadTemperature } : c));
   };
 
-  const exportBatch = () => {
-    const rows = bulkRows.map((row) => ({
-      Name: row.name,
-      Phone: row.phone,
-      Suburb: row.suburb,
-      Address: row.address,
-      Message: renderTemplate(scripts[bulkScript], row),
-      AssignedTo: row.assignedTo,
-      Status: row.status,
-    }));
-    downloadCsv("propcon_whatsapp_batch.csv", objectsToCsv(rows));
-  };
-
-  const exportRegister = () => {
-    const rows = contacts.map((c) => ({
-      Name: c.name,
-      Phone: c.phone,
-      Suburb: c.suburb,
-      Area: c.area,
-      Address: c.address,
-      Status: c.status,
-      Script: c.script,
-      AssignedTo: c.assignedTo,
-      Reply: c.reply,
-      Notes: c.notes,
-      FollowUpDue: c.followUpDue ? "Yes" : "No",
-      OptedOut: c.optedOut ? "Yes" : "No",
-      Source: c.source,
-      LastContacted: c.lastContacted || "",
-      OwnerType: c.ownerType || "",
-      LeadTemperature: c.leadTemperature || "",
-      ValuationRange: c.valuationRange || "",
-    }));
-    downloadCsv("propcon_canvassing_register.csv", objectsToCsv(rows));
+  const exportBulk = () => {
+    const rows = filtered.filter((c) => bulkSelected[c.id]).map((c) => `${c.name},${c.phone},${c.suburb},${c.address},${renderTemplate(scripts[selectedScript], c)}`);
+    const csv = ["Name,Phone,Suburb,Address,Message", ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "propcon_bulk_export.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   };
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.14),transparent_28%),radial-gradient(circle_at_top_right,rgba(16,185,129,0.12),transparent_24%),linear-gradient(180deg,#f8fbff_0%,#eef5ff_48%,#f8fafc_100%)] p-4 md:p-8">
-      <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => void handleCsvFile(e.target.files?.[0] || null)} />
-
-      <div className="mx-auto max-w-7xl space-y-6">
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="grid gap-4 lg:grid-cols-[1.35fr_.85fr]">
-          <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
-            <div className="mb-3 flex flex-wrap gap-2">
-              <Badge>CRM Dashboard</Badge>
-              <OutlineBadge>PropCon Friendly</OutlineBadge>
-              <OutlineBadge>WhatsApp Workflow</OutlineBadge>
-              <OutlineBadge>Canvasser View</OutlineBadge>
-            </div>
-
-            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+    <div className="min-h-screen bg-[linear-gradient(135deg,#f8fbff_0%,#eef4ff_35%,#f8fafc_100%)] text-slate-900">
+      <div className="grid min-h-screen lg:grid-cols-[260px_1fr]">
+        <aside className="border-r border-slate-200 bg-[#0f172a] text-white">
+          <div className="border-b border-white/10 px-6 py-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-500 shadow-lg">
+                <Building2 size={24} />
+              </div>
               <div>
-                <h1 className="text-3xl font-semibold tracking-tight text-slate-900 md:text-5xl">StephZara CRM</h1>
-                <p className="mt-2 max-w-2xl text-sm text-slate-600 md:text-base">
-                  A brighter, more user-friendly canvassing CRM for PropCon lead imports, follow-ups, WhatsApp messaging, suburb tracking, and manager oversight.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <ActionButton primary onClick={handleImportClick}><Upload size={16} /> Import CSV</ActionButton>
-                <ActionButton onClick={exportRegister}><Download size={16} /> Export Register</ActionButton>
+                <div className="text-lg font-semibold">StephZara</div>
+                <div className="text-xs text-slate-300">PropCon CRM</div>
               </div>
             </div>
+          </div>
 
-            <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-              <MetricCard icon={<Users size={16} />} title="Contacts" value={String(metrics.total)} subtitle="active records" />
-              <MetricCard icon={<MessageSquare size={16} />} title="Reply Rate" value={`${metrics.replyRate}%`} subtitle="engaged replies" />
-              <MetricCard icon={<CalendarDays size={16} />} title="Appointments" value={String(metrics.appointments)} subtitle="booked leads" />
-              <MetricCard icon={<Bell size={16} />} title="Follow-ups" value={String(metrics.due)} subtitle="due today" />
-              <MetricCard icon={<Sparkles size={16} />} title="Warm Leads" value={String(metrics.warm)} subtitle="warm or hot" />
+          <div className="px-4 py-5">
+            <div className="mb-3 px-3 text-xs uppercase tracking-[0.2em] text-slate-400">Navigation</div>
+            <div className="space-y-2">
+              {views.map(({ key, label, icon: Icon }) => (
+                <button
+                  key={key}
+                  onClick={() => setView(key)}
+                  className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm transition ${view === key ? "bg-white text-slate-900 shadow-lg" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}
+                >
+                  <Icon size={18} />
+                  <span>{label}</span>
+                </button>
+              ))}
             </div>
-          </section>
+          </div>
 
-          <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
-            <div className="mb-4">
-              <h3 className="flex items-center gap-2 text-lg font-semibold"><ShieldCheck size={18} /> Safe canvassing rules</h3>
-              <p className="mt-1 text-sm text-slate-600">Designed for a real human-led CRM workflow.</p>
-            </div>
-            <Rule>Start with short text-only outreach.</Rule>
-            <Rule>Only send reports or images after a reply.</Rule>
-            <Rule>Opt-out instantly on NO or stop request.</Rule>
-            <Rule>Use suburb campaigns to stay area-focused.</Rule>
-            <Rule>Managers review due follow-ups daily.</Rule>
-            <div className="mt-3 rounded-2xl border border-slate-100 bg-gradient-to-r from-slate-50 to-emerald-50 p-4">
-              <div className="mb-1 flex items-center gap-2 font-medium"><Bot size={16} /> Bot handoff path</div>
-              <div className="text-xs text-slate-600">Intro message → reply detected → canvasser takeover → valuation or archive</div>
-            </div>
-          </section>
-        </motion.div>
-
-        <div className="grid grid-cols-2 gap-2 rounded-[24px] border border-white/70 bg-white/90 p-2 shadow-[0_18px_40px_rgba(15,23,42,0.08)] backdrop-blur md:grid-cols-7">
-          {([
-            ["dashboard", "Dashboard", LayoutGrid],
-            ["workspace", "Workspace", MessageSquare],
-            ["pipeline", "Pipeline", ListChecks],
-            ["import", "Import", Upload],
-            ["bulk", "Bulk Export", Download],
-            ["manager", "Manager", BarChart3],
-            ["settings", "Settings", Building2],
-          ] as [TabKey, string, React.ComponentType<{ size?: number }>][]) .map(([tab, label, Icon]) => (
-            <button
-              key={tab}
-              className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium transition ${activeTab === tab ? "bg-gradient-to-r from-slate-900 to-slate-700 text-white shadow" : "text-slate-500 hover:bg-slate-50"}`}
-              onClick={() => setActiveTab(tab)}
-            >
-              <Icon size={16} /> {label}
-            </button>
-          ))}
-        </div>
-
-        {activeTab === "dashboard" && (
-          <div className="grid gap-6 lg:grid-cols-[1.05fr_.95fr]">
-            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <h3 className="text-xl font-semibold">Today’s focus</h3>
-                  <p className="text-sm text-slate-600">Quick CRM snapshot for canvassing momentum.</p>
-                </div>
-                <OutlineBadge>{metrics.due} due today</OutlineBadge>
+          <div className="px-4 py-2">
+            <div className="rounded-3xl bg-white/5 p-4">
+              <div className="mb-2 flex items-center gap-2 text-sm font-medium"><Sparkles size={16} /> Daily Targets</div>
+              <div className="space-y-3 text-sm text-slate-300">
+                <div className="flex items-center justify-between"><span>Follow-ups</span><span>{stats.due}</span></div>
+                <div className="flex items-center justify-between"><span>Warm leads</span><span>{stats.warm}</span></div>
+                <div className="flex items-center justify-between"><span>Appointments</span><span>{stats.appointments}</span></div>
               </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <HighlightCard title="Priority queue" value={`${contacts.filter((c) => c.followUpDue && !c.optedOut).length} leads`} note="Follow-ups needing action today" icon={<Clock3 size={18} />} />
-                <HighlightCard title="Hot opportunities" value={`${contacts.filter((c) => c.leadTemperature === "Hot").length} leads`} note="Best chance of valuations or appointments" icon={<Sparkles size={18} />} />
-                <HighlightCard title="Manager view" value={`${contacts.filter((c) => c.status === "Appointment").length} booked`} note="Appointments scheduled across canvassers" icon={<CalendarDays size={18} />} />
-                <HighlightCard title="Area spread" value={`${suburbRows.length} suburbs`} note="Campaigns currently represented" icon={<MapPin size={18} />} />
-              </div>
-              <div className="mt-5 rounded-[28px] border border-slate-100 bg-gradient-to-r from-slate-50 to-blue-50 p-5">
-                <div className="mb-3 flex items-center justify-between">
+            </div>
+          </div>
+        </aside>
+
+        <main className="p-5 md:p-8">
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mx-auto max-w-7xl space-y-6">
+            <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_25px_80px_rgba(15,23,42,0.08)]">
+              <div className="bg-[linear-gradient(120deg,#0f172a_0%,#1d4ed8_45%,#06b6d4_100%)] px-6 py-7 text-white md:px-8">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div>
-                    <div className="text-sm font-semibold">Next best contact</div>
-                    <div className="text-xs text-slate-500">Use this to move faster through the day.</div>
+                    <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-medium backdrop-blur"><Sparkles size={14} /> Production CRM View</div>
+                    <h1 className="text-3xl font-semibold md:text-5xl">PropCon Canvassing Workspace</h1>
+                    <p className="mt-2 max-w-3xl text-sm text-cyan-50 md:text-base">
+                      A brighter CRM-style interface with pipeline cards, suburb tracking, canvasser workspace, and fast WhatsApp actions.
+                    </p>
                   </div>
-                  <ActionButton accent onClick={() => setActiveTab("workspace")}><ArrowRight size={16} /> Open workspace</ActionButton>
+                  <div className="flex flex-wrap gap-2">
+                    <button className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-medium text-slate-900 shadow"><Upload size={16} /> Import CSV</button>
+                    <button className="inline-flex items-center gap-2 rounded-2xl bg-white/15 px-4 py-3 text-sm font-medium text-white backdrop-blur"><Download size={16} /> Export Register</button>
+                  </div>
                 </div>
-                <div className="rounded-2xl bg-white p-4 shadow-sm">
-                  <div className="flex items-center justify-between gap-3">
+              </div>
+
+              <div className="grid gap-4 px-6 py-5 md:grid-cols-2 xl:grid-cols-5 md:px-8">
+                <StatCard title="Contacts" value={String(stats.total)} icon={<Users size={18} />} tone="slate" />
+                <StatCard title="Warm Leads" value={String(stats.warm)} icon={<Star size={18} />} tone="amber" />
+                <StatCard title="Interested" value={String(stats.interested)} icon={<MessageSquare size={18} />} tone="emerald" />
+                <StatCard title="Appointments" value={String(stats.appointments)} icon={<CalendarDays size={18} />} tone="blue" />
+                <StatCard title="Follow-ups Due" value={String(stats.due)} icon={<Bell size={18} />} tone="rose" />
+              </div>
+            </section>
+
+            {view === "dashboard" && (
+              <div className="grid gap-6 xl:grid-cols-[1.2fr_.8fr]">
+                <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="mb-4 flex items-center justify-between">
+                    <div>
+                      <h2 className="text-xl font-semibold">Today’s command center</h2>
+                      <p className="text-sm text-slate-500">Looks and feels more like a real CRM.</p>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">Live queue</span>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <FocusCard title="Priority follow-ups" value={`${stats.due} leads`} subtitle="Needs action today" icon={<Clock3 size={18} />} color="from-rose-500 to-orange-400" />
+                    <FocusCard title="Hot opportunities" value={`${contacts.filter((c) => c.leadTemperature === "Hot").length} leads`} subtitle="Ready for appointments" icon={<Sparkles size={18} />} color="from-amber-500 to-yellow-400" />
+                    <FocusCard title="New imports" value={`${contacts.filter((c) => c.source === "PropCon CSV").length} records`} subtitle="Latest campaign records" icon={<Upload size={18} />} color="from-sky-500 to-cyan-400" />
+                    <FocusCard title="Manager view" value={`${stats.appointments} booked`} subtitle="Current valuation appointments" icon={<CheckCircle2 size={18} />} color="from-emerald-500 to-teal-400" />
+                  </div>
+                </section>
+
+                <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="mb-4 flex items-center justify-between">
+                    <div>
+                      <h2 className="text-xl font-semibold">Best next contact</h2>
+                      <p className="text-sm text-slate-500">Fast action panel.</p>
+                    </div>
+                    <button onClick={() => setView("workspace")} className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-medium text-white">Open workspace</button>
+                  </div>
+                  <div className="rounded-[28px] bg-[linear-gradient(135deg,#eff6ff_0%,#ffffff_45%,#ecfeff_100%)] p-5">
                     <div className="flex items-center gap-3">
-                      <Avatar name={selected.name} />
+                      <Avatar name={selected.name} large />
                       <div>
-                        <div className="font-medium text-slate-900">{selected.name}</div>
+                        <div className="text-lg font-semibold">{selected.name}</div>
                         <div className="text-sm text-slate-500">{selected.suburb} · {selected.valuationRange}</div>
                       </div>
                     </div>
-                    <StatusBadge status={selected.status} />
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
-              <div className="mb-4">
-                <h3 className="text-xl font-semibold">Quick suburb performance</h3>
-                <p className="text-sm text-slate-600">Where the current campaign is getting the best movement.</p>
-              </div>
-              <div className="space-y-4">
-                {suburbRows.map((row) => {
-                  const rate = row.total ? Math.round((row.interested / row.total) * 100) : 0;
-                  return (
-                    <div key={row.suburb}>
-                      <div className="mb-2 flex items-center justify-between text-sm">
-                        <span>{row.suburb}</span>
-                        <span>{row.appointments} appointments · {row.interested} interested</span>
-                      </div>
-                      <div className="h-3 overflow-hidden rounded-full bg-slate-200">
-                        <div className="h-full rounded-full bg-gradient-to-r from-blue-600 to-cyan-400" style={{ width: `${rate}%` }} />
-                      </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <StatusPill status={selected.status} />
+                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">{selected.assignedTo}</span>
+                      <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">{selected.leadTemperature}</span>
                     </div>
-                  );
-                })}
+                    <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                      <button onClick={copyMessage} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 shadow-sm"><Copy size={16} /> Copy Message</button>
+                      <button onClick={openWhatsApp} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(90deg,#10b981_0%,#06b6d4_100%)] px-4 py-3 text-sm font-medium text-white shadow-lg"><MessageSquare size={16} /> Open WhatsApp</button>
+                    </div>
+                  </div>
+                </section>
               </div>
-            </section>
-          </div>
-        )}
+            )}
 
-        {activeTab === "workspace" && (
-          <div className="grid gap-6 lg:grid-cols-[1.05fr_.95fr]">
-            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
-              <div className="mb-4">
-                <h3 className="text-xl font-semibold">Contact queue</h3>
-                <p className="text-sm text-slate-600">Search and filter the live canvassing list.</p>
-              </div>
+            {view === "workspace" && (
+              <div className="grid gap-6 xl:grid-cols-[1fr_1.08fr]">
+                <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="mb-4 flex items-center justify-between">
+                    <div>
+                      <h2 className="text-xl font-semibold">Lead list</h2>
+                      <p className="text-sm text-slate-500">PropCon records with CRM styling.</p>
+                    </div>
+                    <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">{filtered.length} visible</span>
+                  </div>
 
-              <div className="mb-4 flex flex-col gap-3 md:flex-row">
-                <div className="flex flex-1 items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50/90 px-4 py-3 shadow-sm">
-                  <Search size={16} />
-                  <input className="w-full bg-transparent outline-none" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, suburb, phone, address..." />
-                </div>
-                <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50/90 px-4 py-3 shadow-sm">
-                  <Filter size={16} />
-                  <select className="bg-transparent outline-none" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                    {statuses.map((status) => <option key={status} value={status}>{status}</option>)}
-                  </select>
-                </div>
-                <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50/90 px-4 py-3 shadow-sm">
-                  <Users size={16} />
-                  <select className="bg-transparent outline-none" value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)}>
-                    <option value="All">All assignees</option>
-                    {assignees.map((name) => <option key={name} value={name}>{name}</option>)}
-                  </select>
-                </div>
-              </div>
+                  <div className="mb-4 flex flex-col gap-3 lg:flex-row">
+                    <div className="flex flex-1 items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 shadow-sm">
+                      <Search size={16} className="text-slate-400" />
+                      <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, suburb, phone..." className="w-full bg-transparent outline-none" />
+                    </div>
+                    <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 shadow-sm">
+                      <Filter size={16} className="text-slate-400" />
+                      <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as ContactStatus | "All")} className="bg-transparent outline-none">
+                        {statuses.map((s) => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 shadow-sm">
+                      <Users size={16} className="text-slate-400" />
+                      <select value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)} className="bg-transparent outline-none">
+                        {assignees.map((a) => <option key={a} value={a}>{a}</option>)}
+                      </select>
+                    </div>
+                  </div>
 
-              <div className="max-h-[700px] space-y-3 overflow-auto pr-1">
-                {filtered.map((contact) => (
-                  <button
-                    key={contact.id}
-                    onClick={() => {
-                      setSelectedId(contact.id);
-                      setSelectedScript(contact.script);
-                    }}
-                    className={`w-full rounded-[24px] border p-4 text-left transition ${selectedId === contact.id ? "border-slate-900 bg-gradient-to-r from-slate-50 to-blue-50 shadow-md" : "border-slate-200 bg-white hover:-translate-y-0.5 hover:bg-slate-50 hover:shadow-md"}`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-start gap-3">
-                        <Avatar name={contact.name} />
+                  <div className="max-h-[780px] space-y-3 overflow-auto pr-1">
+                    {filtered.map((contact) => (
+                      <button
+                        key={contact.id}
+                        onClick={() => {
+                          setSelectedId(contact.id);
+                          setSelectedScript(contact.script);
+                        }}
+                        className={`w-full rounded-[26px] border p-4 text-left transition ${selected.id === contact.id ? "border-blue-300 bg-[linear-gradient(135deg,#eff6ff_0%,#ffffff_55%,#ecfeff_100%)] shadow-md" : "border-slate-200 bg-white hover:-translate-y-0.5 hover:shadow-md"}`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-3">
+                            <Avatar name={contact.name} />
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <div className="font-semibold text-slate-900">{contact.name}</div>
+                                <StatusPill status={contact.status} />
+                                {contact.followUpDue && contact.status !== "Do Not Contact" ? <span className="rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-medium text-rose-700">Due</span> : null}
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-3 text-sm text-slate-500">
+                                <span className="inline-flex items-center gap-1"><Phone size={14} /> {contact.phone}</span>
+                                <span className="inline-flex items-center gap-1"><MapPin size={14} /> {contact.suburb}</span>
+                              </div>
+                              <div className="mt-2 text-xs text-slate-500">{contact.address}</div>
+                              <div className="mt-3 flex items-center gap-2">
+                                <span className={`h-2.5 w-2.5 rounded-full ${tempClasses(contact.leadTemperature)}`} />
+                                <span className="text-xs font-medium text-slate-600">{contact.leadTemperature}</span>
+                                <span className="text-xs text-slate-400">•</span>
+                                <span className="text-xs text-slate-500">{contact.assignedTo}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <ChevronRight size={18} className="text-slate-400" />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="mb-4 flex items-center justify-between gap-4">
+                    <div>
+                      <h2 className="text-xl font-semibold">Client card</h2>
+                      <p className="text-sm text-slate-500">Feels more like a CRM deal card than plain text.</p>
+                    </div>
+                    <button onClick={nextContact} className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow"><ArrowRight size={16} /> Next</button>
+                  </div>
+
+                  <div className="rounded-[30px] bg-[linear-gradient(135deg,#eef2ff_0%,#ffffff_45%,#ecfeff_100%)] p-5">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                      <div className="flex items-start gap-4">
+                        <Avatar name={selected.name} large />
                         <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <div className="font-medium">{contact.name}</div>
-                            <StatusBadge status={contact.status} />
-                            {contact.followUpDue && !contact.optedOut ? <OutlineBadge>Due</OutlineBadge> : null}
-                            {contact.optedOut ? <OutlineBadge>Opted Out</OutlineBadge> : null}
+                          <div className="text-2xl font-semibold text-slate-900">{selected.name}</div>
+                          <div className="mt-1 text-sm text-slate-500">{selected.address}</div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <StatusPill status={selected.status} />
+                            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">{selected.leadTemperature}</span>
+                            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">{selected.valuationRange}</span>
                           </div>
-                          <div className="mt-2 flex flex-wrap gap-3 text-sm text-slate-600">
-                            <span className="inline-flex items-center gap-1"><Phone size={14} /> {contact.phone}</span>
-                            <span className="inline-flex items-center gap-1"><MapPin size={14} /> {contact.suburb}</span>
-                            <span className="inline-flex items-center gap-1"><Users size={14} /> {contact.assignedTo || "Unassigned"}</span>
-                          </div>
-                          <div className="mt-2 text-xs text-slate-500">{contact.address} · {contact.ownerType}</div>
                         </div>
                       </div>
-                      <ChevronRight size={18} className="text-slate-400" />
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <InfoTile icon={<Phone size={15} />} label="Phone" value={selected.phone} />
+                        <InfoTile icon={<Users size={15} />} label="Agent" value={selected.assignedTo} />
+                        <InfoTile icon={<MapPin size={15} />} label="Suburb" value={selected.suburb} />
+                        <InfoTile icon={<Building2 size={15} />} label="Source" value={selected.source} />
+                      </div>
                     </div>
-                  </button>
+                  </div>
+
+                  <div className="mt-5 grid gap-3 sm:grid-cols-4">
+                    <StatusAction label="Mark Waiting" onClick={() => markStatus("Waiting")} />
+                    <StatusAction label="Mark Interested" onClick={() => markStatus("Interested")} tone="emerald" />
+                    <StatusAction label="Set Appointment" onClick={() => markStatus("Appointment")} tone="blue" />
+                    <StatusAction label="Opt Out" onClick={() => markStatus("Do Not Contact")} tone="rose" icon={<Ban size={14} />} />
+                  </div>
+
+                  <div className="mt-5 grid gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Script</label>
+                      <select value={selectedScript} onChange={(e) => setSelectedScript(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm outline-none">
+                        {Object.keys(scripts).map((s) => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Assigned canvasser</label>
+                      <select value={selected.assignedTo} onChange={(e) => setContacts((prev) => prev.map((c) => c.id === selected.id ? { ...c, assignedTo: e.target.value } : c))} className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm outline-none">
+                        {assignees.filter((a) => a !== "All").map((a) => <option key={a} value={a}>{a}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 rounded-[28px] border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#ecfdf5_100%)] p-4 shadow-sm">
+                    <div className="mb-3 flex items-center justify-between">
+                      <div className="text-sm font-semibold text-slate-800">WhatsApp Message</div>
+                      <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600 shadow-sm">{selectedScript}</span>
+                    </div>
+                    <textarea value={draftMessage} readOnly className="min-h-[170px] w-full rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-inner outline-none" />
+                    <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                      <button onClick={copyMessage} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 shadow-sm"><Copy size={16} /> Copy Message</button>
+                      <button onClick={openWhatsApp} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(90deg,#10b981_0%,#06b6d4_100%)] px-4 py-3 text-sm font-medium text-white shadow-lg"><MessageSquare size={16} /> Open WhatsApp</button>
+                      <button onClick={() => alert("Message logged")} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(90deg,#0f172a_0%,#334155_100%)] px-4 py-3 text-sm font-medium text-white shadow"><Send size={16} /> Log Send</button>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Reply / Feedback</label>
+                      <textarea value={selected.reply} onChange={(e) => setContacts((prev) => prev.map((c) => c.id === selected.id ? { ...c, reply: e.target.value } : c))} className="min-h-[120px] w-full rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-sm outline-none" />
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Notes</label>
+                      <textarea value={selected.notes} onChange={(e) => setContacts((prev) => prev.map((c) => c.id === selected.id ? { ...c, notes: e.target.value } : c))} className="min-h-[120px] w-full rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-sm outline-none" />
+                    </div>
+                  </div>
+                </section>
+              </div>
+            )}
+
+            {view === "pipeline" && (
+              <div className="grid gap-4 xl:grid-cols-5">
+                {pipeline.map((column) => (
+                  <section key={column.status} className="rounded-[30px] border border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="mb-4 flex items-center justify-between">
+                      <div className="font-semibold text-slate-900">{column.status}</div>
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">{column.items.length}</span>
+                    </div>
+                    <div className="space-y-3">
+                      {column.items.map((contact) => (
+                        <button key={contact.id} onClick={() => { setSelectedId(contact.id); setSelectedScript(contact.script); setView("workspace"); }} className="w-full rounded-2xl border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#f8fafc_100%)] p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+                          <div className="flex items-center gap-3">
+                            <Avatar name={contact.name} />
+                            <div className="min-w-0">
+                              <div className="truncate font-medium text-slate-900">{contact.name}</div>
+                              <div className="truncate text-xs text-slate-500">{contact.suburb}</div>
+                            </div>
+                          </div>
+                          <div className="mt-3 flex items-center justify-between">
+                            <span className="text-xs text-slate-500">{contact.assignedTo}</span>
+                            <span className={`h-2.5 w-2.5 rounded-full ${tempClasses(contact.leadTemperature)}`} />
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
                 ))}
               </div>
-            </section>
+            )}
 
-            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-xl font-semibold">Contact workspace</h3>
-                  <p className="text-sm text-slate-600">CRM detail panel for your canvasser.</p>
-                </div>
-                <OutlineBadge>{selected.leadTemperature || "Cold"}</OutlineBadge>
+            {view === "import" && (
+              <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
+                <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="mb-4">
+                    <h2 className="text-xl font-semibold">PropCon Import</h2>
+                    <p className="text-sm text-slate-500">Drag-and-drop style import panel feel.</p>
+                  </div>
+                  <div className="rounded-[30px] border-2 border-dashed border-cyan-200 bg-[linear-gradient(135deg,#eff6ff_0%,#ecfeff_100%)] p-10 text-center">
+                    <FileSpreadsheet className="mx-auto mb-3 text-cyan-600" size={38} />
+                    <div className="text-lg font-semibold text-slate-900">{csvName}</div>
+                    <div className="mt-1 text-sm text-slate-500">Map your PropCon export to the CRM structure.</div>
+                    <button className="mt-5 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow"><Upload size={16} className="mr-2 inline" />Choose CSV</button>
+                  </div>
+                </section>
+                <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="mb-4">
+                    <h2 className="text-xl font-semibold">Preview Table</h2>
+                    <p className="text-sm text-slate-500">Shows how the imported records will appear.</p>
+                  </div>
+                  <div className="overflow-hidden rounded-[28px] border border-slate-200">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-slate-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-medium text-slate-600">Name</th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-600">Phone</th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-600">Suburb</th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-600">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {contacts.slice(0, 5).map((row) => (
+                          <tr key={row.id} className="border-t bg-white">
+                            <td className="px-4 py-3">{row.name}</td>
+                            <td className="px-4 py-3">{row.phone}</td>
+                            <td className="px-4 py-3">{row.suburb}</td>
+                            <td className="px-4 py-3">{row.status}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
               </div>
+            )}
 
-              {selected && (
-                <>
-                  <div className="rounded-[28px] bg-gradient-to-br from-slate-100 via-white to-blue-50 p-5 ring-1 ring-slate-100">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <Avatar name={selected.name} large />
-                      <div>
-                        <h2 className="text-2xl font-semibold">{selected.name}</h2>
-                        <div className="mt-1 flex flex-wrap items-center gap-2">
-                          <StatusBadge status={selected.status} />
-                          {selected.optedOut ? <OutlineBadge>Do Not Contact</OutlineBadge> : null}
-                          <OutlineBadge>{selected.valuationRange || "Pending valuation"}</OutlineBadge>
+            {view === "bulk" && (
+              <div className="grid gap-6 xl:grid-cols-[1.08fr_.92fr]">
+                <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="mb-4 flex items-center justify-between">
+                    <div>
+                      <h2 className="text-xl font-semibold">Bulk WhatsApp Export</h2>
+                      <p className="text-sm text-slate-500">Prepare rows that are ready for canvassing.</p>
+                    </div>
+                    <button onClick={exportBulk} className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow"><Download size={16} className="mr-2 inline" />Export CSV</button>
+                  </div>
+                  <div className="overflow-hidden rounded-[28px] border border-slate-200">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-slate-50">
+                        <tr>
+                          <th className="px-4 py-3"></th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-600">Name</th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-600">Phone</th>
+                          <th className="px-4 py-3 text-left font-medium text-slate-600">Suburb</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filtered.map((row) => (
+                          <tr key={row.id} className="border-t bg-white">
+                            <td className="px-4 py-3"><input type="checkbox" checked={!!bulkSelected[row.id]} onChange={() => setBulkSelected((prev) => ({ ...prev, [row.id]: !prev[row.id] }))} /></td>
+                            <td className="px-4 py-3">{row.name}</td>
+                            <td className="px-4 py-3">{row.phone}</td>
+                            <td className="px-4 py-3">{row.suburb}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+                <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="mb-4">
+                    <h2 className="text-xl font-semibold">Preview</h2>
+                    <p className="text-sm text-slate-500">See what the export will look like.</p>
+                  </div>
+                  <div className="space-y-3">
+                    {filtered.filter((c) => bulkSelected[c.id]).length ? filtered.filter((c) => bulkSelected[c.id]).map((c) => (
+                      <div key={c.id} className="rounded-2xl border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#f8fafc_100%)] p-4 shadow-sm">
+                        <div className="mb-2 flex items-center justify-between">
+                          <div className="font-medium text-slate-900">{c.name}</div>
+                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">{c.suburb}</span>
                         </div>
+                        <div className="font-mono text-xs text-slate-600">{renderTemplate(scripts[selectedScript], c)}</div>
                       </div>
-                    </div>
-                    <div className="mt-4 grid gap-3 md:grid-cols-2">
-                      <InfoBox icon={<Phone size={15} />} label="Phone" value={selected.phone} />
-                      <InfoBox icon={<MapPin size={15} />} label="Suburb" value={selected.suburb} />
-                      <InfoBox icon={<Building2 size={15} />} label="Address" value={selected.address} />
-                      <InfoBox icon={<UserRound size={15} />} label="Assigned To" value={selected.assignedTo} />
-                    </div>
+                    )) : <div className="rounded-2xl bg-slate-100 p-8 text-center text-slate-500">Select contacts to preview the export.</div>}
                   </div>
+                </section>
+              </div>
+            )}
 
-                  <div className="mt-4 grid gap-3 md:grid-cols-4">
-                    <ActionButton onClick={() => markStatus("Waiting")}>Mark Waiting</ActionButton>
-                    <ActionButton onClick={() => markStatus("Interested")}>Mark Interested</ActionButton>
-                    <ActionButton primary onClick={() => markStatus("Appointment")}>Set Appointment</ActionButton>
-                    <ActionButton danger onClick={() => markStatus("Do Not Contact")}><Ban size={16} /> Opt Out</ActionButton>
+            {view === "manager" && (
+              <div className="grid gap-6 xl:grid-cols-2">
+                <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="mb-4">
+                    <h2 className="text-xl font-semibold">Suburb Performance</h2>
+                    <p className="text-sm text-slate-500">Campaign strength by area.</p>
                   </div>
-
-                  <div className="mt-4 grid gap-4 md:grid-cols-2">
-                    <div>
-                      <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-slate-500">Script</label>
-                      <select className="w-full rounded-2xl border bg-white px-4 py-3 outline-none" value={selectedScript} onChange={(e) => setSelectedScript(e.target.value)}>
-                        {Object.keys(scripts).map((name) => <option key={name} value={name}>{name}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-slate-500">Assigned canvasser</label>
-                      <select className="w-full rounded-2xl border bg-white px-4 py-3 outline-none" value={selected.assignedTo} onChange={(e) => updateSelected({ assignedTo: e.target.value })}>
-                        {assignees.filter((a) => a !== "Unassigned").map((name) => <option key={name} value={name}>{name}</option>)}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 rounded-[28px] border border-slate-200 bg-gradient-to-br from-white to-emerald-50/40 p-4 shadow-sm">
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <label className="block text-xs font-medium uppercase tracking-wide text-slate-500">WhatsApp draft</label>
-                      <OutlineBadge>{selectedScript}</OutlineBadge>
-                    </div>
-                    <textarea className="min-h-[170px] w-full rounded-2xl border border-slate-200 bg-white p-4 outline-none shadow-inner" readOnly value={draftMessage} />
-                  </div>
-
-                  <div className="mt-4 grid gap-3 md:grid-cols-4">
-                    <ActionButton glow onClick={copyMessage}><Copy size={16} /> Copy Message</ActionButton>
-                    <ActionButton primary glow onClick={openWhatsApp}><MessageSquare size={16} /> Open WhatsApp</ActionButton>
-                    <ActionButton onClick={() => updateSelected({ followUpDue: false, status: selected.status === "New" ? "Waiting" : selected.status, lastContacted: new Date().toISOString().slice(0, 10) })}><Send size={16} /> Log Send</ActionButton>
-                    <ActionButton accent onClick={nextContact}><ArrowRight size={16} /> Next Contact</ActionButton>
-                  </div>
-
-                  <div className="mt-4 grid gap-4 md:grid-cols-2">
-                    <div>
-                      <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-slate-500">Reply / last feedback</label>
-                      <textarea className="min-h-[120px] w-full rounded-2xl border bg-white p-4 outline-none" value={selected.reply} onChange={(e) => updateSelected({ reply: e.target.value })} placeholder="Paste reply or summary..." />
-                    </div>
-                    <div>
-                      <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-slate-500">Canvasser notes</label>
-                      <textarea className="min-h-[120px] w-full rounded-2xl border bg-white p-4 outline-none" value={selected.notes} onChange={(e) => updateSelected({ notes: e.target.value })} placeholder="Add call notes, seller timing, objections..." />
-                    </div>
-                  </div>
-                </>
-              )}
-            </section>
-          </div>
-        )}
-
-        {activeTab === "pipeline" && (
-          <div className="grid gap-4 xl:grid-cols-5">
-            {pipelineCounts.map((column) => (
-              <section key={column.status} className="rounded-[32px] border border-white/70 bg-white/90 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
-                <div className="mb-4 flex items-center justify-between">
-                  <div className="font-semibold text-slate-900">{column.status}</div>
-                  <OutlineBadge>{column.items.length}</OutlineBadge>
-                </div>
-                <div className="space-y-3">
-                  {column.items.map((contact) => (
-                    <button key={contact.id} onClick={() => { setSelectedId(contact.id); setSelectedScript(contact.script); setActiveTab("workspace"); }} className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-                      <div className="flex items-center gap-3">
-                        <Avatar name={contact.name} />
-                        <div className="min-w-0">
-                          <div className="truncate font-medium text-slate-900">{contact.name}</div>
-                          <div className="truncate text-xs text-slate-500">{contact.suburb}</div>
+                  <div className="space-y-5">
+                    {suburbStats.map((row) => {
+                      const rate = row.total ? Math.round((row.interested / row.total) * 100) : 0;
+                      return (
+                        <div key={row.suburb}>
+                          <div className="mb-2 flex items-center justify-between text-sm">
+                            <span>{row.suburb}</span>
+                            <span>{row.appointments} appts · {row.interested} interested</span>
+                          </div>
+                          <div className="h-3 overflow-hidden rounded-full bg-slate-200">
+                            <div className="h-full rounded-full bg-[linear-gradient(90deg,#2563eb_0%,#06b6d4_100%)]" style={{ width: `${rate}%` }} />
+                          </div>
                         </div>
-                      </div>
-                      <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
-                        <span>{contact.assignedTo}</span>
-                        <span>{contact.leadTemperature || "Cold"}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            ))}
-          </div>
-        )}
-
-        {activeTab === "import" && (
-          <div className="grid gap-6 lg:grid-cols-[.95fr_1.05fr]">
-            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
-              <div className="mb-4">
-                <h3 className="text-xl font-semibold">PropCon import</h3>
-                <p className="text-sm text-slate-600">Cleaner CRM-style import flow with CSV upload.</p>
-              </div>
-              <div className="rounded-3xl border border-dashed border-slate-300 bg-gradient-to-br from-slate-50 to-blue-50 p-8 text-center">
-                <FileSpreadsheet className="mx-auto h-10 w-10 text-slate-400" />
-                <div className="mt-3 text-sm font-medium">Selected file</div>
-                <div className="mt-1 text-sm text-slate-500">{csvName}</div>
-                <ActionButton primary onClick={handleImportClick}><Upload size={16} /> Choose CSV</ActionButton>
-              </div>
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <MappedField field="Owner Name" value="name" />
-                <MappedField field="Cell Number" value="phone" />
-                <MappedField field="Suburb" value="suburb" />
-                <MappedField field="Address" value="address" />
-                <MappedField field="Notes" value="notes" />
-                <MappedField field="Area" value="area" />
-              </div>
-            </section>
-
-            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
-              <div className="mb-4">
-                <h3 className="text-xl font-semibold">Import preview</h3>
-                <p className="text-sm text-slate-600">Example layout for incoming PropCon leads.</p>
-              </div>
-              <div className="overflow-auto rounded-[28px] border border-slate-200 shadow-sm">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Phone</TableHead>
-                      <TableHead>Suburb</TableHead>
-                      <TableHead>Address</TableHead>
-                      <TableHead>Status</TableHead>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {contacts.slice(0, 5).map((row) => (
-                      <tr key={row.id} className="border-t">
-                        <TableCell>{row.name}</TableCell>
-                        <TableCell>{row.phone}</TableCell>
-                        <TableCell>{row.suburb}</TableCell>
-                        <TableCell>{row.address}</TableCell>
-                        <TableCell>{row.status}</TableCell>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          </div>
-        )}
-
-        {activeTab === "bulk" && (
-          <div className="grid gap-6 lg:grid-cols-[1.05fr_.95fr]">
-            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
-              <div className="mb-4">
-                <h3 className="text-xl font-semibold">Bulk export builder</h3>
-                <p className="text-sm text-slate-600">Select contacts and prepare a PropCon-friendly batch.</p>
-              </div>
-
-              <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="text-sm text-slate-600">{selectedCount} selected from {filtered.length} filtered contacts</div>
-                <div className="flex gap-2">
-                  <ActionButton onClick={() => {
-                    const next: Record<string, boolean> = {};
-                    filtered.forEach((c) => { next[c.id] = true; });
-                    setSelectedRows(next);
-                  }}>Select all</ActionButton>
-                  <ActionButton onClick={() => setSelectedRows({})}>Clear</ActionButton>
-                </div>
-              </div>
-
-              <div className="mb-4 grid gap-3 md:grid-cols-[1fr_auto_auto] md:items-end">
-                <div>
-                  <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-slate-500">Bulk script</label>
-                  <select className="w-full rounded-2xl border bg-white px-4 py-3 outline-none" value={bulkScript} onChange={(e) => setBulkScript(e.target.value)}>
-                    {Object.keys(scripts).map((name) => <option key={name} value={name}>{name}</option>)}
-                  </select>
-                </div>
-                <ActionButton onClick={() => void navigator.clipboard.writeText(bulkRows.map((c) => `${c.name}\t${c.phone}\t${c.suburb}\t${c.address}\t${renderTemplate(scripts[bulkScript], c)}`).join("\n"))}><Copy size={16} /> Copy Rows</ActionButton>
-                <ActionButton primary onClick={exportBatch}><Download size={16} /> Export CSV</ActionButton>
-              </div>
-
-              <div className="overflow-auto rounded-[28px] border border-slate-200 shadow-sm">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <TableHead></TableHead>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Phone</TableHead>
-                      <TableHead>Suburb</TableHead>
-                      <TableHead>Assigned</TableHead>
-                      <TableHead>Status</TableHead>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((row) => (
-                      <tr key={row.id} className="border-t">
-                        <TableCell><input type="checkbox" checked={!!selectedRows[row.id]} onChange={() => setSelectedRows((prev) => ({ ...prev, [row.id]: !prev[row.id] }))} /></TableCell>
-                        <TableCell>{row.name}</TableCell>
-                        <TableCell>{row.phone}</TableCell>
-                        <TableCell>{row.suburb}</TableCell>
-                        <TableCell>{row.assignedTo}</TableCell>
-                        <TableCell>{row.status}</TableCell>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-
-            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
-              <div className="mb-4">
-                <h3 className="text-xl font-semibold">Export preview</h3>
-                <p className="text-sm text-slate-600">Copy-ready output for PropCon WhatsApp canvassing.</p>
-              </div>
-              <div className="space-y-3">
-                {bulkRows.length ? bulkRows.map((row) => (
-                  <div key={row.id} className="rounded-2xl border bg-white p-4 text-xs text-slate-700 shadow-sm">
-                    <div className="mb-2 flex items-center justify-between">
-                      <div className="font-medium text-slate-900">{row.name}</div>
-                      <OutlineBadge>{row.suburb}</OutlineBadge>
-                    </div>
-                    <div className="font-mono break-words">{row.name} | {row.phone} | {row.suburb} | {row.address} | {renderTemplate(scripts[bulkScript], row)}</div>
+                      );
+                    })}
                   </div>
-                )) : <div className="rounded-2xl bg-slate-100 p-8 text-center text-slate-600">Select contacts to preview the exported PropCon rows.</div>}
+                </section>
+                <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="mb-4">
+                    <h2 className="text-xl font-semibold">Canvasser Leaderboard</h2>
+                    <p className="text-sm text-slate-500">Simple view of current performance.</p>
+                  </div>
+                  <div className="space-y-3">
+                    {["Lerato", "Megan"].map((name, i) => {
+                      const rows = contacts.filter((c) => c.assignedTo === name);
+                      return (
+                        <div key={name} className="rounded-2xl border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#f8fafc_100%)] p-4 shadow-sm">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 font-medium text-slate-900"><Star size={15} /> {i + 1}. {name}</div>
+                            <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-medium text-white">{rows.length} leads</span>
+                          </div>
+                          <div className="mt-3 grid grid-cols-3 gap-3">
+                            <MiniBox label="Interested" value={rows.filter((r) => r.status === "Interested").length} />
+                            <MiniBox label="Appointments" value={rows.filter((r) => r.status === "Appointment").length} />
+                            <MiniBox label="Due" value={rows.filter((r) => r.followUpDue).length} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
               </div>
-            </section>
-          </div>
-        )}
-
-        {activeTab === "manager" && (
-          <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
-            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
-              <div className="mb-4">
-                <h3 className="text-xl font-semibold">Suburb performance</h3>
-                <p className="text-sm text-slate-600">Quick area-level overview for management.</p>
-              </div>
-              <div className="space-y-4">
-                {suburbRows.map((row) => {
-                  const rate = row.total ? Math.round((row.interested / row.total) * 100) : 0;
-                  return (
-                    <div key={row.suburb}>
-                      <div className="mb-2 flex items-center justify-between text-sm">
-                        <span>{row.suburb}</span>
-                        <span>{row.appointments} appointments · {row.interested} interested</span>
-                      </div>
-                      <div className="h-3 overflow-hidden rounded-full bg-slate-200">
-                        <div className="h-full rounded-full bg-gradient-to-r from-blue-600 to-cyan-400" style={{ width: `${rate}%` }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-
-            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
-              <div className="mb-4">
-                <h3 className="text-xl font-semibold">Team leaderboard</h3>
-                <p className="text-sm text-slate-600">Simple canvasser performance snapshot.</p>
-              </div>
-              <div className="space-y-3">
-                {assignees.filter((a) => a !== "Unassigned").map((name, index) => {
-                  const rows = contacts.filter((c) => c.assignedTo === name);
-                  const score = rows.reduce((sum, row) => sum + row.score, 0);
-                  return (
-                    <div key={name} className="rounded-2xl border bg-white p-4 shadow-sm">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 font-medium"><Star size={14} /> {index + 1}. {name}</div>
-                        <Badge>{score} pts</Badge>
-                      </div>
-                      <div className="mt-3 grid grid-cols-3 gap-3 text-sm text-slate-600">
-                        <MiniInfo label="Leads" value={rows.length} />
-                        <MiniInfo label="Interested" value={rows.filter((r) => r.status === "Interested").length} />
-                        <MiniInfo label="Appointments" value={rows.filter((r) => r.status === "Appointment").length} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          </div>
-        )}
-
-        {activeTab === "settings" && (
-          <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
-            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
-              <div className="mb-4">
-                <h3 className="text-xl font-semibold">Runtime settings</h3>
-                <p className="text-sm text-slate-600">Deployment-facing settings panel style.</p>
-              </div>
-              <div className="space-y-3 text-sm text-slate-700">
-                <SettingRow label="Mode" value="Production CRM Preview" />
-                <SettingRow label="Data Source" value="PropCon CSV + Supabase ready" />
-                <SettingRow label="Export Format" value="PropCon-friendly batch rows" />
-                <SettingRow label="WhatsApp Flow" value="Human-first, copy/send workflow" />
-              </div>
-            </section>
-
-            <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.10)] backdrop-blur">
-              <div className="mb-4">
-                <h3 className="text-xl font-semibold">Next implementation layer</h3>
-                <p className="text-sm text-slate-600">What this UI is ready to plug into next.</p>
-              </div>
-              <Rule>Supabase auth and roles</Rule>
-              <Rule>CSV import persistence</Rule>
-              <Rule>Audit history per contact</Rule>
-              <Rule>Vercel deployment</Rule>
-              <Rule>Optional approved WhatsApp API handoff</Rule>
-            </section>
-          </div>
-        )}
+            )}
+          </motion.div>
+        </main>
       </div>
     </div>
   );
 }
 
 function Avatar({ name, large }: { name: string; large?: boolean }) {
-  return (
-    <div className={`inline-flex items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-400 font-semibold text-white shadow ${large ? "h-14 w-14 text-base" : "h-11 w-11 text-sm"}`}>
-      {initials(name)}
-    </div>
-  );
+  return <div className={`flex items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#2563eb_0%,#06b6d4_100%)] font-semibold text-white shadow-lg ${large ? "h-14 w-14 text-base" : "h-11 w-11 text-sm"}`}>{initials(name)}</div>;
 }
 
-function Badge({ children }: { children: React.ReactNode }) {
-  return <span className="inline-flex items-center rounded-full bg-gradient-to-r from-slate-900 to-blue-700 px-3 py-1 text-xs text-white shadow-sm">{children}</span>;
-}
-
-function OutlineBadge({ children }: { children: React.ReactNode }) {
-  return <span className="inline-flex items-center rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-xs text-slate-700 shadow-sm">{children}</span>;
-}
-
-function StatusBadge({ status }: { status: ContactStatus }) {
-  const styles: Record<ContactStatus, string> = {
-    New: "bg-slate-100 text-slate-700",
-    Waiting: "bg-amber-100 text-amber-800",
-    Interested: "bg-emerald-100 text-emerald-800",
-    Appointment: "bg-blue-100 text-blue-800",
-    "Do Not Contact": "bg-rose-100 text-rose-800",
+function StatCard({ title, value, icon, tone }: { title: string; value: string; icon: React.ReactNode; tone: "slate" | "amber" | "emerald" | "blue" | "rose" }) {
+  const tones: Record<string, string> = {
+    slate: "from-slate-50 to-slate-100 text-slate-900",
+    amber: "from-amber-50 to-yellow-100 text-amber-900",
+    emerald: "from-emerald-50 to-teal-100 text-emerald-900",
+    blue: "from-sky-50 to-blue-100 text-sky-900",
+    rose: "from-rose-50 to-orange-100 text-rose-900",
   };
-  return <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${styles[status]}`}>{status}</span>;
-}
-
-function ActionButton({ children, primary, danger, accent, glow, onClick }: { children: React.ReactNode; primary?: boolean; danger?: boolean; accent?: boolean; glow?: boolean; onClick?: () => void }) {
-  const style = danger
-    ? "bg-gradient-to-r from-rose-600 to-red-500 text-white"
-    : primary
-      ? "bg-gradient-to-r from-slate-900 to-slate-700 text-white"
-      : accent
-        ? "bg-gradient-to-r from-blue-600 to-cyan-500 text-white"
-        : "border border-slate-200 bg-white text-slate-900";
-  return <button onClick={onClick} className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium transition hover:-translate-y-0.5 ${style} ${glow ? "shadow-lg shadow-emerald-100" : "shadow-sm"}`}>{children}</button>;
-}
-
-function MetricCard({ icon, title, value, subtitle }: { icon: React.ReactNode; title: string; value: string; subtitle: string }) {
   return (
-    <div className="rounded-[28px] border border-white/70 bg-gradient-to-br from-white to-slate-100 p-4 shadow-sm">
-      <div className="flex items-center gap-2 text-xs text-slate-500">{icon} {title}</div>
-      <div className="mt-1 text-2xl font-semibold text-slate-900">{value}</div>
-      <div className="text-xs text-slate-500">{subtitle}</div>
+    <div className={`rounded-[28px] border border-slate-200 bg-gradient-to-br p-5 shadow-sm ${tones[tone]}`}>
+      <div className="flex items-center gap-2 text-sm font-medium opacity-80">{icon} {title}</div>
+      <div className="mt-3 text-3xl font-semibold">{value}</div>
     </div>
   );
 }
 
-function HighlightCard({ title, value, note, icon }: { title: string; value: string; note: string; icon: React.ReactNode }) {
+function FocusCard({ title, value, subtitle, icon, color }: { title: string; value: string; subtitle: string; icon: React.ReactNode; color: string }) {
   return (
-    <div className="rounded-[28px] border border-white/70 bg-white p-5 shadow-sm">
-      <div className="flex items-center gap-2 text-sm font-medium text-slate-600">{icon} {title}</div>
+    <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+      <div className={`mb-3 inline-flex rounded-2xl bg-gradient-to-r px-3 py-2 text-white shadow ${color}`}>{icon}</div>
+      <div className="text-sm font-medium text-slate-500">{title}</div>
       <div className="mt-2 text-2xl font-semibold text-slate-900">{value}</div>
-      <div className="mt-1 text-xs text-slate-500">{note}</div>
+      <div className="mt-1 text-xs text-slate-500">{subtitle}</div>
     </div>
   );
 }
 
-function Rule({ children }: { children: React.ReactNode }) {
-  return <div className="mt-3 rounded-2xl border border-slate-100 bg-gradient-to-r from-slate-50 to-blue-50 p-4 text-sm text-slate-700">{children}</div>;
+function StatusPill({ status }: { status: ContactStatus }) {
+  return <span className={`rounded-full border px-3 py-1 text-xs font-medium ${badgeClasses(status)}`}>{status}</span>;
 }
 
-function InfoBox({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function InfoTile({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-white/70 bg-white/90 p-4 text-sm text-slate-700 shadow-sm">
+    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
       <div className="mb-1 flex items-center gap-2 text-xs text-slate-500">{icon} {label}</div>
-      <div className="font-medium text-slate-900">{value}</div>
+      <div className="text-sm font-medium text-slate-900">{value}</div>
     </div>
   );
 }
 
-function MappedField({ field, value }: { field: string; value: string }) {
+function StatusAction({ label, onClick, tone, icon }: { label: string; onClick: () => void; tone?: "emerald" | "blue" | "rose"; icon?: React.ReactNode }) {
+  const style = tone === "emerald" ? "bg-emerald-600 text-white" : tone === "blue" ? "bg-blue-600 text-white" : tone === "rose" ? "bg-rose-600 text-white" : "border border-slate-200 bg-white text-slate-900";
+  return <button onClick={onClick} className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium shadow-sm ${style}`}>{icon}{label}</button>;
+}
+
+function MiniBox({ label, value }: { label: string; value: number }) {
   return (
-    <div>
-      <div className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">{field}</div>
-      <div className="rounded-2xl border bg-white px-4 py-3 text-sm text-slate-700">{value}</div>
-    </div>
-  );
-}
-
-function TableHead({ children }: { children: React.ReactNode }) {
-  return <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">{children}</th>;
-}
-
-function TableCell({ children }: { children: React.ReactNode }) {
-  return <td className="px-4 py-3 text-sm text-slate-700">{children}</td>;
-}
-
-function MiniInfo({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-2xl border border-white/70 bg-gradient-to-br from-slate-50 to-white p-3 shadow-sm">
+    <div className="rounded-2xl bg-slate-100 p-3 text-center">
       <div className="text-xs text-slate-500">{label}</div>
-      <div className="mt-1 font-semibold text-slate-900">{value}</div>
-    </div>
-  );
-}
-
-function SettingRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-100 bg-gradient-to-r from-slate-50 to-white p-4 shadow-sm">
-      <div className="text-xs text-slate-500">{label}</div>
-      <div className="mt-1 font-medium text-slate-900">{value}</div>
+      <div className="mt-1 text-lg font-semibold text-slate-900">{value}</div>
     </div>
   );
 }
