@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
-type View = "dashboard" | "contacts" | "scripts" | "bulk" | "manager";
+type View = "dashboard" | "contacts" | "scripts" | "bulk" | "manager" | "birthdays";
 type CrmTag = "Unmessaged" | "Messaged" | "Responded" | "Hot Seller" | "Follow Up" | "Archived";
 
 type Contact = {
@@ -188,6 +188,19 @@ const DEFAULT_SCRIPTS: ScriptItem[] = [
   { id: "s10", name: "Friendly Intro", category: "Canvassing", content: "Hi {{name}}, I’m reaching out to a few homeowners in {{suburb}} with a free report on recent property sales. No obligation at all — would you like me to send it through?" },
 ];
 
+const DEFAULT_BIRTHDAY_SCRIPTS: ScriptItem[] = [
+  { id: "b1", name: "Birthday Message 1", category: "Birthday", content: "Happy Birthday {{name}}. Wishing you a wonderful day filled with joy, good health, and special moments. Have a fantastic celebration." },
+  { id: "b2", name: "Birthday Message 2", category: "Birthday", content: "Hi {{name}}, happy birthday to you. Wishing you a really special day and a year ahead filled with happiness, peace, and success." },
+  { id: "b3", name: "Birthday Message 3", category: "Birthday", content: "Happy Birthday {{name}}. Hope your day is full of laughter, love, and everything that makes you happiest. Enjoy every moment." },
+  { id: "b4", name: "Birthday Message 4", category: "Birthday", content: "Hi {{name}}, wishing you a very happy birthday and a beautiful year ahead. May today be full of blessings, joy, and celebration." },
+  { id: "b5", name: "Birthday Message 5", category: "Birthday", content: "Happy Birthday {{name}}. I hope today brings you lots of happiness, good memories, and time with the people who matter most." },
+  { id: "b6", name: "Birthday Message 6", category: "Birthday", content: "Hi {{name}}, just a warm birthday wish to say I hope you have a lovely day and an amazing year ahead. Happy Birthday." },
+  { id: "b7", name: "Birthday Message 7", category: "Birthday", content: "Happy Birthday {{name}}. May your day be bright, peaceful, and full of all the little things that make life beautiful." },
+  { id: "b8", name: "Birthday Message 8", category: "Birthday", content: "Hi {{name}}, many happy returns on your birthday. Wishing you good health, happiness, and plenty of reasons to smile today." },
+  { id: "b9", name: "Birthday Message 9", category: "Birthday", content: "Happy Birthday {{name}}. Hope this year brings you exciting opportunities, great memories, and lots of happiness." },
+  { id: "b10", name: "Birthday Message 10", category: "Birthday", content: "Hi {{name}}, wishing you a truly wonderful birthday and a year ahead filled with joy, peace, and success. Enjoy your special day." },
+];
+
 function safeParse<T>(raw: string | null, fallback: T): T {
   if (!raw) return fallback;
   try {
@@ -280,6 +293,17 @@ function csvEscape(value: unknown): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+function isBirthdayToday(birthDay: string): boolean {
+  if (!birthDay) return false;
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const normalized = birthDay.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return normalized.slice(5) === `${month}-${day}`;
+  if (/^\d{2}-\d{2}$/.test(normalized)) return normalized === `${month}-${day}`;
+  return false;
+}
+
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div style={styles.miniStat}>
@@ -343,6 +367,8 @@ export default function App() {
   const [newScriptName, setNewScriptName] = useState<string>("");
   const [newScriptCategory, setNewScriptCategory] = useState<string>("Canvassing");
   const [newScriptContent, setNewScriptContent] = useState<string>("");
+  const [editingScriptId, setEditingScriptId] = useState<string | null>(null);
+  const [editingContactId, setEditingContactId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -387,17 +413,23 @@ export default function App() {
     });
   }, [contacts, quickSearch, selectedSuburb, selectedTag, fieldSearch]);
 
-  const selectedBulkContacts = filtered.filter((c) => selectedBulk[c.id]);
-  const currentBulk = selectedBulkContacts[bulkIndex] || null;
+  const birthdayContacts = useMemo(() => contacts.filter((c) => isBirthdayToday(c.birthDay)), [contacts]);
+  const birthdayBulkContacts = birthdayContacts;
+  const birthdayCurrent = birthdayBulkContacts[bulkIndex] || null;
+  const isBirthdayView = view === "birthdays";
+  const activeBulkContacts = isBirthdayView ? birthdayBulkContacts : filtered.filter((c) => selectedBulk[c.id]);
+  const currentBulk = isBirthdayView ? birthdayCurrent : activeBulkContacts[bulkIndex] || null;
   const currentDraft = currentBulk ? bulkDrafts[currentBulk.id] : undefined;
 
   useEffect(() => {
-    if (!selectedBulkContacts.length || !scripts.length) return;
+    if (!activeBulkContacts.length) return;
+    const rotationSource = isBirthdayView ? DEFAULT_BIRTHDAY_SCRIPTS : scripts;
+    if (!rotationSource.length) return;
     setBulkDrafts((prev) => {
       const next = { ...prev };
-      selectedBulkContacts.forEach((c, i) => {
+      activeBulkContacts.forEach((c, i) => {
         if (!next[c.id]) {
-          const script = scripts[i % scripts.length];
+          const script = rotationSource[i % rotationSource.length];
           next[c.id] = {
             scriptId: script.id,
             message: renderTemplate(script.content, c),
@@ -406,7 +438,7 @@ export default function App() {
       });
       return next;
     });
-  }, [selectedBulkContacts, scripts]);
+  }, [activeBulkContacts, scripts, isBirthdayView]);
 
   const stats = {
     total: contacts.length,
@@ -414,6 +446,7 @@ export default function App() {
     responded: contacts.filter((c) => c.crmTag === "Responded").length,
     hot: contacts.filter((c) => c.crmTag === "Hot Seller").length,
     due: contacts.filter((c) => c.followUpDue).length,
+    birthdays: birthdayContacts.length,
   };
 
   const importCsv = async (file: File | null) => {
@@ -479,22 +512,56 @@ export default function App() {
       alert("Add a script name and content first");
       return;
     }
-    const item: ScriptItem = {
-      id: `script-${Date.now()}`,
-      name: newScriptName.trim(),
-      category: newScriptCategory.trim() || "Canvassing",
-      content: newScriptContent.trim(),
-    };
-    setScripts((prev) => [item, ...prev]);
-    setSelectedScriptId(item.id);
+
+    if (editingScriptId) {
+      setScripts((prev) => prev.map((s) => (s.id === editingScriptId ? { ...s, name: newScriptName.trim(), category: newScriptCategory.trim() || "Canvassing", content: newScriptContent.trim() } : s)));
+      alert("Script updated");
+    } else {
+      const item: ScriptItem = {
+        id: `script-${Date.now()}`,
+        name: newScriptName.trim(),
+        category: newScriptCategory.trim() || "Canvassing",
+        content: newScriptContent.trim(),
+      };
+      setScripts((prev) => [item, ...prev]);
+      setSelectedScriptId(item.id);
+      alert("Script saved");
+    }
+
+    setEditingScriptId(null);
     setNewScriptName("");
     setNewScriptCategory("Canvassing");
     setNewScriptContent("");
-    alert("Script saved");
+  };
+
+  const beginEditScript = (scriptId: string) => {
+    const script = scripts.find((s) => s.id === scriptId);
+    if (!script) return;
+    setEditingScriptId(scriptId);
+    setNewScriptName(script.name);
+    setNewScriptCategory(script.category);
+    setNewScriptContent(script.content);
+  };
+
+  const deleteScript = (scriptId: string) => {
+    const next = scripts.filter((s) => s.id !== scriptId);
+    if (!next.length) {
+      alert("You need at least one normal script.");
+      return;
+    }
+    setScripts(next);
+    if (selectedScriptId === scriptId) setSelectedScriptId(next[0].id);
+    if (editingScriptId === scriptId) {
+      setEditingScriptId(null);
+      setNewScriptName("");
+      setNewScriptCategory("Canvassing");
+      setNewScriptContent("");
+    }
   };
 
   const openBulkSend = () => {
-    if (!selectedBulkContacts.length) {
+    const normalSelected = filtered.filter((c) => selectedBulk[c.id]);
+    if (!normalSelected.length) {
       alert("Select contacts first");
       return;
     }
@@ -502,9 +569,15 @@ export default function App() {
     setView("bulk");
   };
 
+  const openBirthdays = () => {
+    setBulkIndex(0);
+    setView("birthdays");
+  };
+
   const updateDraftScript = (contactId: string, scriptId: string) => {
     const c = contacts.find((x) => x.id === contactId);
-    const s = scripts.find((x) => x.id === scriptId);
+    const sourceScripts = isBirthdayView ? DEFAULT_BIRTHDAY_SCRIPTS : scripts;
+    const s = sourceScripts.find((x) => x.id === scriptId);
     if (!c || !s) return;
     setBulkDrafts((prev) => ({
       ...prev,
@@ -513,10 +586,12 @@ export default function App() {
   };
 
   const rotateScript = () => {
-    if (!currentBulk || !scripts.length) return;
-    const currentId = currentDraft?.scriptId || scripts[0].id;
-    const idx = scripts.findIndex((s) => s.id === currentId);
-    const next = scripts[(idx + 1) % scripts.length];
+    if (!currentBulk) return;
+    const rotationSource = isBirthdayView ? DEFAULT_BIRTHDAY_SCRIPTS : scripts;
+    if (!rotationSource.length) return;
+    const currentId = currentDraft?.scriptId || rotationSource[0].id;
+    const idx = rotationSource.findIndex((s) => s.id === currentId);
+    const next = rotationSource[(idx + 1) % rotationSource.length];
     updateDraftScript(currentBulk.id, next.id);
   };
 
@@ -550,10 +625,14 @@ export default function App() {
     setContacts((prev) => prev.map((c) => (c.id === contactId ? { ...c, ...patch, modified: today() } : c)));
   };
 
+  const updateContactField = (contactId: string, field: keyof Contact, value: string) => {
+    patchContact(contactId, { [field]: value } as Partial<Contact>);
+  };
+
   const markSentAndNext = () => {
     if (!currentBulk) return;
     patchContact(currentBulk.id, { crmTag: "Messaged", lastContacted: today(), followUpDue: true, followUpDate: addDays(3) });
-    if (bulkIndex < selectedBulkContacts.length - 1) setBulkIndex((x) => x + 1);
+    if (bulkIndex < activeBulkContacts.length - 1) setBulkIndex((x) => x + 1);
     else alert("Queue complete");
   };
 
@@ -604,16 +683,16 @@ export default function App() {
   };
 
   const exportBulk = () => {
-    if (!selectedBulkContacts.length) {
+    if (!activeBulkContacts.length) {
       alert("No selected contacts");
       return;
     }
-    downloadCsv("propcon_bulk_export.csv", selectedBulkContacts.map((c) => ({
+    downloadCsv(isBirthdayView ? "birthday_bulk_export.csv" : "propcon_bulk_export.csv", activeBulkContacts.map((c) => ({
       Name: c.name,
       Surname: c.surname,
       Cell: c.cell,
       Suburb: c.suburb,
-      Script: scripts.find((s) => s.id === (bulkDrafts[c.id]?.scriptId || selectedScriptId))?.name || "",
+      Script: (isBirthdayView ? DEFAULT_BIRTHDAY_SCRIPTS : scripts).find((s) => s.id === (bulkDrafts[c.id]?.scriptId || selectedScriptId))?.name || "",
       Message: bulkDrafts[c.id]?.message || "",
     })));
   };
@@ -621,6 +700,26 @@ export default function App() {
   const openFollowUps = () => {
     setSelectedTag("Follow Up");
     setView("contacts");
+  };
+
+  const saveContactEdit = () => {
+    setEditingContactId(null);
+    alert("Contact updated");
+  };
+
+  const deleteContact = (contactId: string) => {
+    setContacts((prev) => prev.filter((c) => c.id !== contactId));
+    setSelectedBulk((prev) => {
+      const next = { ...prev };
+      delete next[contactId];
+      return next;
+    });
+    setBulkDrafts((prev) => {
+      const next = { ...prev };
+      delete next[contactId];
+      return next;
+    });
+    if (editingContactId === contactId) setEditingContactId(null);
   };
 
   return (
@@ -697,6 +796,9 @@ export default function App() {
                   <MetricCard title="Responded" value={stats.responded} bg="linear-gradient(135deg,#ecfdf5,#bbf7d0)" />
                   <MetricCard title="Hot Sellers" value={stats.hot} bg="linear-gradient(135deg,#fff1f2,#fecdd3)" />
                 </div>
+                <div style={{ marginTop: 16 }}>
+                  <button onClick={openBirthdays} style={styles.primaryButton}>Today's Birthdays ({stats.birthdays})</button>
+                </div>
               </section>
               <section style={styles.card}>
                 <div style={styles.sectionTitle}>Suburb Groups</div>
@@ -752,17 +854,39 @@ export default function App() {
                       <th style={styles.th}>CRM Tag</th>
                       <th style={styles.th}>Suburb</th>
                       {FIELD_DEFS.map(([key, label]) => <th key={key} style={styles.th}>{label}</th>)}
+                      <th style={styles.th}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map((c) => (
-                      <tr key={c.id}>
-                        <td style={styles.td}><input type="checkbox" checked={!!selectedBulk[c.id]} onChange={() => setSelectedBulk((p) => ({ ...p, [c.id]: !p[c.id] }))} /></td>
-                        <td style={styles.td}>{c.crmTag}</td>
-                        <td style={styles.td}>{c.suburb}</td>
-                        {FIELD_DEFS.map(([key]) => <td key={key} style={styles.td}>{String((c as any)[key] || "")}</td>)}
-                      </tr>
-                    ))}
+                    {filtered.map((c) => {
+                      const isEditing = editingContactId === c.id;
+                      return (
+                        <tr key={c.id}>
+                          <td style={styles.td}><input type="checkbox" checked={!!selectedBulk[c.id]} onChange={() => setSelectedBulk((p) => ({ ...p, [c.id]: !p[c.id] }))} /></td>
+                          <td style={styles.td}>{c.crmTag}</td>
+                          <td style={styles.td}>{isEditing ? <input value={c.suburb} onChange={(e) => updateContactField(c.id, "suburb", e.target.value)} style={{ ...styles.input, minWidth: 140, padding: "8px 10px" }} /> : c.suburb}</td>
+                          {FIELD_DEFS.map(([key]) => (
+                            <td key={key} style={styles.td}>
+                              {isEditing ? (
+                                <input value={String((c as any)[key] || "")} onChange={(e) => updateContactField(c.id, key as keyof Contact, e.target.value)} style={{ ...styles.input, minWidth: 140, padding: "8px 10px" }} />
+                              ) : (
+                                String((c as any)[key] || "")
+                              )}
+                            </td>
+                          ))}
+                          <td style={styles.td}>
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                              {isEditing ? (
+                                <button onClick={saveContactEdit} style={styles.secondaryButton}>Save</button>
+                              ) : (
+                                <button onClick={() => setEditingContactId(c.id)} style={styles.secondaryButton}>Edit</button>
+                              )}
+                              <button onClick={() => deleteContact(c.id)} style={styles.secondaryButton}>Delete</button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -775,15 +899,20 @@ export default function App() {
                 <div style={styles.sectionTitle}>Saved Scripts</div>
                 <div style={styles.previewStack}>
                   {scripts.map((s) => (
-                    <button key={s.id} onClick={() => setSelectedScriptId(s.id)} style={{ ...styles.previewCard, ...(selectedScriptId === s.id ? styles.selectedCard : {}) }}>
+                    <div key={s.id} style={{ ...styles.previewCard, ...(selectedScriptId === s.id ? styles.selectedCard : {}) }}>
                       <div style={styles.previewHead}><div style={styles.previewName}>{s.name}</div><span style={styles.tag}>{s.category}</span></div>
                       <div style={styles.previewMessage}>{s.content}</div>
-                    </button>
+                      <div style={{ ...styles.filtersRow, marginTop: 12, marginBottom: 0 }}>
+                        <button onClick={() => setSelectedScriptId(s.id)} style={styles.secondaryButton}>Select</button>
+                        <button onClick={() => beginEditScript(s.id)} style={styles.secondaryButton}>Edit</button>
+                        <button onClick={() => deleteScript(s.id)} style={styles.secondaryButton}>Delete</button>
+                      </div>
+                    </div>
                   ))}
                 </div>
               </section>
               <section style={styles.card}>
-                <div style={styles.sectionTitle}>Create Script</div>
+                <div style={styles.sectionTitle}>{editingScriptId ? "Edit Script" : "Create Script"}</div>
                 <div style={{ marginBottom: 14 }}>
                   <label style={styles.label}>Script Name</label>
                   <input value={newScriptName} onChange={(e) => setNewScriptName(e.target.value)} style={styles.input} />
@@ -797,27 +926,27 @@ export default function App() {
                   <textarea value={newScriptContent} onChange={(e) => setNewScriptContent(e.target.value)} style={styles.textarea} />
                 </div>
                 <div style={styles.filtersRow}>
-                  <button onClick={saveScript} style={styles.primaryButton}>Save Script</button>
-                  <button onClick={() => { setNewScriptName(""); setNewScriptCategory("Canvassing"); setNewScriptContent(""); }} style={styles.secondaryButton}>Clear</button>
+                  <button onClick={saveScript} style={styles.primaryButton}>{editingScriptId ? "Save Changes" : "Save Script"}</button>
+                  <button onClick={() => { setEditingScriptId(null); setNewScriptName(""); setNewScriptCategory("Canvassing"); setNewScriptContent(""); }} style={styles.secondaryButton}>Clear</button>
                 </div>
               </section>
             </div>
           )}
 
-          {view === "bulk" && (
+          {(view === "bulk" || view === "birthdays") && (
             <div style={styles.twoCol}>
               <section style={styles.card}>
                 <div style={styles.cardHeader}>
                   <div>
-                    <div style={styles.sectionTitle}>Bulk WhatsApp Queue</div>
-                    <div style={styles.sectionSub}>Review and send one contact at a time.</div>
+                    <div style={styles.sectionTitle}>{view === "birthdays" ? "Birthday WhatsApp Queue" : "Bulk WhatsApp Queue"}</div>
+                    <div style={styles.sectionSub}>{view === "birthdays" ? "Birthday contacts for today with rotating birthday messages." : "Review and send one contact at a time."}</div>
                   </div>
                   <button onClick={exportBulk} style={styles.primaryButton}>Export Bulk CSV</button>
                 </div>
 
                 <div style={styles.filtersRow}>
                   <button onClick={() => setBulkIndex((x) => Math.max(0, x - 1))} style={styles.secondaryButton}>Previous</button>
-                  <button onClick={() => setBulkIndex((x) => Math.min(selectedBulkContacts.length - 1, x + 1))} style={styles.secondaryButton}>Next</button>
+                  <button onClick={() => setBulkIndex((x) => Math.min(activeBulkContacts.length - 1, x + 1))} style={styles.secondaryButton}>Next</button>
                   <button onClick={rotateScript} style={styles.secondaryButton}>Rotate Script</button>
                   <button onClick={openCurrentInWhatsApp} style={styles.primaryButton}>Open in WhatsApp</button>
                   <button onClick={copyCurrentMessage} style={styles.secondaryButton}>Copy Message</button>
@@ -825,7 +954,7 @@ export default function App() {
 
                 {currentBulk ? (
                   <div style={styles.queueBox}>
-                    <div style={styles.previewHead}><div style={styles.previewName}>Queue Item {bulkIndex + 1} / {selectedBulkContacts.length}</div><span style={styles.tag}>{fullName(currentBulk)}</span></div>
+                    <div style={styles.previewHead}><div style={styles.previewName}>Queue Item {bulkIndex + 1} / {activeBulkContacts.length}</div><span style={styles.tag}>{fullName(currentBulk)}</span></div>
                     <div style={styles.metaGrid}>
                       <MiniStat label="Cell" value={currentBulk.cell || currentBulk.phone} />
                       <MiniStat label="Suburb" value={currentBulk.suburb} />
@@ -835,7 +964,7 @@ export default function App() {
                     <div style={{ marginTop: 14 }}>
                       <label style={styles.label}>Script for this contact</label>
                       <select value={currentDraft?.scriptId || selectedScriptId} onChange={(e) => updateDraftScript(currentBulk.id, e.target.value)} style={styles.select}>
-                        {scripts.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        {(isBirthdayView ? DEFAULT_BIRTHDAY_SCRIPTS : scripts).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                       </select>
                     </div>
                     <div style={{ marginTop: 14 }}>
@@ -844,32 +973,32 @@ export default function App() {
                     </div>
                     <div style={styles.filtersRow}>
                       <button onClick={markSentAndNext} style={styles.primaryButton}>Mark Sent + Next</button>
-                      <button onClick={markResponded} style={styles.secondaryButton}>Mark Responded</button>
-                      <button onClick={markHotSeller} style={styles.secondaryButton}>Mark Hot Seller</button>
-                      <button onClick={setFollowUp} style={styles.secondaryButton}>Set Follow Up</button>
+                      {!isBirthdayView && <button onClick={markResponded} style={styles.secondaryButton}>Mark Responded</button>}
+                      {!isBirthdayView && <button onClick={markHotSeller} style={styles.secondaryButton}>Mark Hot Seller</button>}
+                      {!isBirthdayView && <button onClick={setFollowUp} style={styles.secondaryButton}>Set Follow Up</button>}
                     </div>
                   </div>
                 ) : (
-                  <div style={styles.emptyBox}>Select contacts in Contacts first.</div>
+                  <div style={styles.emptyBox}>{isBirthdayView ? "No birthdays today." : "Select contacts in Contacts first."}</div>
                 )}
               </section>
 
               <section style={styles.card}>
                 <div style={styles.cardHeader}>
                   <div>
-                    <div style={styles.sectionTitle}>Selected Queue</div>
-                    <div style={styles.sectionSub}>Click any contact to choose it yourself.</div>
+                    <div style={styles.sectionTitle}>{isBirthdayView ? "Today's Birthdays" : "Selected Queue"}</div>
+                    <div style={styles.sectionSub}>{isBirthdayView ? "Click any birthday contact to choose it yourself." : "Click any contact to choose it yourself."}</div>
                   </div>
-                  <div style={styles.topBadge}>{selectedBulkContacts.length} selected</div>
+                  <div style={styles.topBadge}>{activeBulkContacts.length} selected</div>
                 </div>
                 <div style={styles.previewStack}>
-                  {selectedBulkContacts.length ? selectedBulkContacts.map((c, idx) => (
+                  {activeBulkContacts.length ? activeBulkContacts.map((c, idx) => (
                     <button key={c.id} onClick={() => setBulkIndex(idx)} style={{ ...styles.previewCard, ...(idx === bulkIndex ? styles.selectedCard : {}) }}>
-                      <div style={styles.previewHead}><div style={styles.previewName}>{idx + 1}. {fullName(c)}</div><span style={styles.tag}>{scripts.find((s) => s.id === (bulkDrafts[c.id]?.scriptId || selectedScriptId))?.name || "Script"}</span></div>
-                      <div style={{ ...styles.previewMessage, marginBottom: 6 }}>{c.cell || c.phone} · {c.crmTag}</div>
+                      <div style={styles.previewHead}><div style={styles.previewName}>{idx + 1}. {fullName(c)}</div><span style={styles.tag}>{(isBirthdayView ? DEFAULT_BIRTHDAY_SCRIPTS : scripts).find((s) => s.id === (bulkDrafts[c.id]?.scriptId || selectedScriptId))?.name || "Script"}</span></div>
+                      <div style={{ ...styles.previewMessage, marginBottom: 6 }}>{c.cell || c.phone} · {isBirthdayView ? c.birthDay : c.crmTag}</div>
                       <div style={styles.previewMessage}>{bulkDrafts[c.id]?.message || ""}</div>
                     </button>
-                  )) : <div style={styles.emptyBox}>No queue yet.</div>}
+                  )) : <div style={styles.emptyBox}>{isBirthdayView ? "No birthdays today." : "No queue yet."}</div>}
                 </div>
               </section>
             </div>
