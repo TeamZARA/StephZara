@@ -731,7 +731,7 @@ export default function App() {
             <div style={styles.logoBox}>🏢</div>
             <div>
               <div style={styles.brand}>StephZara</div>
-              <div style={styles.brandSub}>PropCon-style CRM</div>
+              <div style={styles.brandSub}></div>
             </div>
           </div>
           <div style={{ padding: 16 }}>
