@@ -213,7 +213,21 @@ function safeParse<T>(raw: string | null, fallback: T): T {
 function normalizeHeader(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
+function normalizePhoneForWhatsApp(phoneRaw: string): string {
+  const cleaned = (phoneRaw || "").replace(/\D/g, "");
 
+  if (!cleaned) return "";
+
+  if (cleaned.startsWith("27")) {
+    return cleaned;
+  }
+
+  if (cleaned.startsWith("0")) {
+    return `27${cleaned.slice(1)}`;
+  }
+
+  return cleaned;
+}
 function fullName(c: Contact): string {
   return `${c.name} ${c.surname}`.trim();
 }
@@ -472,9 +486,9 @@ export default function App() {
       name: pick(row, ["name"]),
       surname: pick(row, ["surname"]),
       email: pick(row, ["email"]),
-      cell: pick(row, ["cell", "mobile"]),
+      cell: normalizePhoneForWhatsApp(pick(row, ["cell", "mobile"])),
+phone: normalizePhoneForWhatsApp(pick(row, ["phone"])),
       address: pick(row, ["address"]),
-      phone: pick(row, ["phone"]),
       type: pick(row, ["type"]),
       idNumber: pick(row, ["idnumber"]),
       birthDay: pick(row, ["birthday"]),
