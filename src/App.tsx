@@ -730,7 +730,7 @@ export default function App() {
           <div style={styles.sidebarHeader}>
             <div style={styles.logoBox}>🏢</div>
             <div>
-              <div style={styles.brand}>StephZara</div>
+              <div style={styles.brand}>MarSteph</div>
               <div style={styles.brandSub}></div>
             </div>
           </div>
